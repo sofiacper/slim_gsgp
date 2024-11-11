@@ -19,13 +19,14 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
 import torch
 from slim_gsgp.initializers.initializers import rhh, grow, full
-from slim_gsgp.algorithms.GSGP.operators.crossover_operators import geometric_crossover
-from slim_gsgp.algorithms.SLIM_GSGP.operators.mutators import (deflate_mutation)
-from slim_gsgp.selection.selection_algorithms import tournament_selection_min
+from slim_gsgp.algorithms.SLIM_GSGP.operators.crossover_operators import geometric_crossover, swap_base_crossover
+from slim_gsgp.algorithms.SLIM_GSGP.operators.mutators import (deflate_mutation, inflate_mutation)
+from slim_gsgp.selection.selection_algorithms import tournament_selection_min, nested_tournament_selection_min
 from slim_gsgp.evaluators.fitness_functions import *
-from slim_gsgp.utils.utils import (get_best_min, protected_div)
+from slim_gsgp.utils.utils import (get_best_min, protected_div, mean_)
 
 # Define functions and constants
 
@@ -33,7 +34,9 @@ FUNCTIONS = {
     'add': {'function': torch.add, 'arity': 2},
     'subtract': {'function': torch.sub, 'arity': 2},
     'multiply': {'function': torch.mul, 'arity': 2},
-    'divide': {'function': protected_div, 'arity': 2}
+    'divide': {'function': protected_div, 'arity': 2},
+    'cosine': {'function': torch.cos, 'arity':1},
+    'mean': {'function': mean_, 'arity':2}
 }
 
 CONSTANTS = {
@@ -65,12 +68,12 @@ slim_gsgp_solve_parameters = {
 # SLIM GSGP parameters
 slim_gsgp_parameters = {
     "initializer": "rhh",
-    "selector": tournament_selection_min(2),
-    "crossover": geometric_crossover,
+    "selector": nested_tournament_selection_min(2),
+    "crossover": swap_base_crossover,
     "ms": None,
     "inflate_mutator": None,
     "deflate_mutator": deflate_mutation,
-    "p_xo": 0,
+    "p_xo": 0.2,
     "settings_dict": settings_dict,
     "find_elit_func": get_best_min,
     "p_inflate": 0.2,

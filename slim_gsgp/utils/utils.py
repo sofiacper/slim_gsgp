@@ -590,6 +590,8 @@ def validate_inputs(X_train, y_train, X_test, y_test, pop_size, n_iter, elitism,
         raise TypeError("log_level must be an int")
 
     assert 0 <= log <= 4, "log_level must be between 0 and 4"
+    #assert 0 <= log <= 10, "log_level must be between 0 and 10" #for exericise with log = 10
+
 
     if not isinstance(verbose, int):
         raise TypeError("verbose level must be an int")

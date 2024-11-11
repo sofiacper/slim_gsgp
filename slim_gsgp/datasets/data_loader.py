@@ -796,3 +796,43 @@ def load_bioav(X_y=True):
         )
     else:
         return df
+
+def load_uscrime(X_y=True):
+    """Loads and returns the USCrime data set (regression)
+
+    The file is located in  https://github.com/EpistasisLab/pmlb/blob/master/datasets/1089_USCrime/1089_USCrime.tsv.gz
+
+    Basic information:
+    - Number of data instances: 47;
+    - Number of input features: 13;
+
+    Parameters
+    ----------
+    X_y : bool (default=False)
+        Return data as two objects of type torch.Tensor, otherwise as a
+        pandas.DataFrame.
+
+    Returns
+    -------
+    X, y : torch.Tensor, torch.Tensor
+        The input data (X) and the target of the prediction (y). The
+        latter is extracted from the data set as the last column.
+    df : pandas.DataFrame
+        An object of type pandas.DataFrame which holds the data. The
+        target is the last column.
+    """
+
+    #df = pd.read_csv('data/1089_USCrime.tsv', sep = '\t')
+    df = pd.read_csv(
+        os.path.join(
+            os.path.dirname(os.path.realpath(__file__)), "data", "1089_USCrime.tsv"
+        ),  sep = '\t'
+    )
+
+    if X_y:
+        return (
+            torch.from_numpy(df.values[:, :-1]).float(),
+            torch.from_numpy(df.values[:, -1]).float(),
+        )
+    else:
+        return df

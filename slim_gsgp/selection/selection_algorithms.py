@@ -126,3 +126,97 @@ def tournament_selection_max(pool_size):
 
     return ts
 
+def nested_tournament_selection_max(pool_size):
+    """
+    Returns a function that performs nested tournament selection to select an individual with the best fitness and node count combination from a population.
+    Parameters
+    ----------
+    pool_size : int
+        Number of individuals participating in the tournament.
+
+    Returns
+    -------
+    Callable
+        A function ('nts') that elects the best individual from a randomly chosen pool.
+
+        Parameters
+        ----------
+        pop : Population
+            The population from which individuals are drawn.
+
+        Returns
+        -------
+        Individual
+            The individual with the lowest fitness in the pool.
+    Notes
+    -----
+    The returned function performs tournament selection by receiving a population and returning the best of {pool_size}
+    randomly selected individuals.
+    """
+    def nts(pop):
+        """
+        Selects the individual with the highest fitness from a randomly chosen pool.
+
+        Parameters
+        ----------
+        pop : Population
+            The population from which individuals are drawn.
+
+        Returns
+        -------
+        Individual
+            The individual with the highest fitness in the pool.
+        """
+        pool = random.choices(pop.population, k=pool_size)
+        pool_fitness = [pool[i] for i in np.argsort([ind.fitness for ind in pool])[-2:]]
+        return pool_fitness[np.argmin([ind.nodes_count for ind in pool_fitness])]
+
+    return nts
+
+def nested_tournament_selection_min(pool_size):
+    """
+    Returns a function that performs nested tournament selection to select an individual with the best fitness and node count combination from a population.
+    Parameters
+    ----------
+    pool_size : int
+        Number of individuals participating in the tournament.
+
+    Returns
+    -------
+    Callable
+        A function ('nts') that elects the best individual from a randomly chosen pool.
+
+        Parameters
+        ----------
+        pop : Population
+            The population from which individuals are drawn.
+
+        Returns
+        -------
+        Individual
+            The individual with the lowest fitness in the pool.
+    Notes
+    -----
+    The returned function performs tournament selection by receiving a population and returning the best of {pool_size}
+    randomly selected individuals.
+    """
+    def nts(pop):
+        """
+        Selects the individual with the highest fitness from a randomly chosen pool.
+
+        Parameters
+        ----------
+        pop : Population
+            The population from which individuals are drawn.
+
+        Returns
+        -------
+        Individual
+            The individual with the highest fitness in the pool.
+        """
+        pool = random.choices(pop.population, k=pool_size)
+        pool_fitness = [pool[i] for i in np.argsort([ind.fitness for ind in pool])[:2]]
+        return pool_fitness[np.argmin([ind.nodes_count for ind in pool_fitness])]
+
+    return nts
+

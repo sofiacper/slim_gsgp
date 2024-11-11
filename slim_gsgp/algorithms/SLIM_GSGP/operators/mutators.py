@@ -429,14 +429,14 @@ def inflate_mutation(FUNCTIONS, TERMINALS,CONSTANTS,two_trees=True,operator="sum
             ),
             reconstruct=reconstruct,
         )
-        # computing offspring attributes
+        #computing offspring attributes
         offs.size = individual.size + 1
         offs.nodes_collection = [*individual.nodes_collection, new_block.nodes]
         offs.nodes_count = sum(offs.nodes_collection) + (offs.size - 1)
 
         offs.depth_collection = [*individual.depth_collection, new_block.depth]
         offs.depth = max(
-            [
+           [
                 depth - (i - 1) if i != 0 else depth
                 for i, depth in enumerate(offs.depth_collection)
             ]

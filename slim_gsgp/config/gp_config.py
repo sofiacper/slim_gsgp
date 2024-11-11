@@ -27,7 +27,7 @@ from slim_gsgp.initializers.initializers import rhh, grow, full
 from slim_gsgp.selection.selection_algorithms import tournament_selection_min
 
 from slim_gsgp.evaluators.fitness_functions import *
-from slim_gsgp.utils.utils import protected_div
+from slim_gsgp.utils.utils import protected_div, mean_
 import torch
 
 # Define functions and constants
@@ -35,7 +35,9 @@ FUNCTIONS = {
     'add': {'function': torch.add, 'arity': 2},
     'subtract': {'function': torch.sub, 'arity': 2},
     'multiply': {'function': torch.mul, 'arity': 2},
-    'divide': {'function': protected_div, 'arity': 2}
+    'divide': {'function': protected_div, 'arity': 2},
+    'cosine': {'function': torch.cos, 'arity':1},
+    'mean': {'function': mean_, 'arity':2}
 }
 
 CONSTANTS = {

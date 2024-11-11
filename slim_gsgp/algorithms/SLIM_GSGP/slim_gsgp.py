@@ -25,6 +25,7 @@ SLIM_GSGP Class for Evolutionary Computation using PyTorch.
 
 import random
 import time
+import inspect
 
 import numpy as np
 import torch
@@ -34,7 +35,7 @@ from slim_gsgp.algorithms.SLIM_GSGP.representations.individual import Individual
 from slim_gsgp.algorithms.SLIM_GSGP.representations.population import Population
 from slim_gsgp.utils.diversity import gsgp_pop_div_from_vectors
 from slim_gsgp.utils.logger import logger
-from slim_gsgp.utils.utils import verbose_reporter
+from slim_gsgp.utils.utils import verbose_reporter, get_best_max, get_best_min, get_random_tree
 
 
 class SLIM_GSGP:
@@ -308,6 +309,28 @@ class SLIM_GSGP:
                     " ".join([str(f) for f in population.fit]),
                     log,
                 ]
+            # level 10 for exercise: Create a new logger level, log = 10, 
+            # where you store the fitness and size of the second best individual and the worst individual, 
+            # make sure that everything that is being saved with log = 1 is also saved.
+            
+            elif log == 10:
+         
+                sorted_ind, _ = self.find_elit_func(population,2)
+                
+                if self.find_elit_func == get_best_min:
+                    _, worst_ind = get_best_max(population, 1)
+                else:
+                    _, worst_ind = get_best_min(population, 1) 
+
+
+                add_info = [self.elite.test_fitness,  #what log = 1 gives
+                            self.elite.nodes_count,   #what log = 1 givess
+                            sorted_ind[1].test_fitness, #second best fitness
+                            sorted_ind[1].nodes_count, #second best size
+                            worst_ind.test_fitness, #worst fitness
+                            worst_ind.nodes_count, #worst count
+                            log]
+            
 
             else:
 
@@ -348,21 +371,83 @@ class SLIM_GSGP:
             while len(offs_pop) < self.pop_size:
 
                 # choosing between crossover and mutation
-
                 if random.random() < self.p_xo:
+                   # print('Crossover is used')
 
                     p1, p2 = self.selector(population), self.selector(population)
                     while p1 == p2:
                         # choosing parents
                         p1, p2 = self.selector(population), self.selector(population)
-                    pass  # future work on slim_gsgp implementations should invent crossover
+                    #print('p1',*p1.collection,'p2', *p2.collection)
+
+                    #get the parameters the crossover calls for
+                    params = list(inspect.signature(self.crossover).parameters.keys())
+
+                    if 'individual' not in params and 'individual1' not in params: #if the crossover is an embeded function
+                        params = list(inspect.signature(self.crossover(self.pi_init['FUNCTIONS'],self.pi_init['TERMINALS'], self.pi_init['CONSTANTS'])).parameters.keys())
+                  
+                        if 'individual1' in params and 'individual2' in params: #if crossover uses 2 trees
+
+                            if self.crossover.__name__ == 'geometric_crossover':
+                                xo_result =self.crossover(self.pi_init['FUNCTIONS'],self.pi_init['TERMINALS'], self.pi_init['CONSTANTS'])(
+                                                p1,
+                                                p2,
+                                                X_train,
+                                                max_depth=self.pi_init["init_depth"],
+                                                p_c=self.pi_init["p_c"],
+                                                X_test=X_test,
+                                                reconstruct=reconstruct) 
+                        
+                            if isinstance(xo_result, tuple): #if crossover gives back 2 trees
+                                off1, off2 = xo_result[0], xo_result[1]
+
+                            else: #if crossover gives back 1 tree
+                                off1 = xo_result
+                                offs_pop.append(off1)
+
+                        elif 'individual' in params: #if crossover needs 1 tree
+                            xo_result = self.crossover()
+
+                            if isinstance(xo_result, tuple): #if crossover gives back 2 trees
+                                off1, off2 = xo_result[0], xo_result[1]
+
+                            else: #if crossover gives back 1 tree
+                                off1 = xo_result
+                                offs_pop.append(off1)
+
+                    else: #if crossover function is not embedded
+                        if 'individual1' in params and 'individual2' in params: #if crossover uses 2 trees
+                            if self.crossover.__name__ == 'swap_base_crossover':
+                                xo_result = self.crossover(p1,p2, reconstruct)
+                       
+                            if isinstance(xo_result, tuple): #if crossover gives back 2 trees
+                                off1, off2 = xo_result[0], xo_result[1]
+                                offs_pop.extend([off1, off2])
+                                
+                            else: #if crossover gives back 1 tree
+                                off1 = xo_result
+
+                        elif 'individual' in params: #if crossover uses 1 tree
+                            xo_result = self.crossover()
+
+                            if isinstance(xo_result, tuple): #if crossover gives back 2 trees
+                                off1, off2 = xo_result[0], xo_result[1]
+                                offs_pop.extend([off1, off2])
+                                
+                            else: #if crossover gives back 1 tree
+                                off1 = xo_result
+
+
+                    #check individuals max depth (should not be over specified in max_depth) -> how to do this with with xo?
+
                 else:
+                    #print('Mutation was used')
                     # so, mutation was selected. Now deflation or inflation is selected.
                     if random.random() < self.p_deflate:
 
                         # selecting the parent to deflate
                         p1 = self.selector(population)
-
+                        #print('p1 deflate', *p1.collection)
                         # if the parent has only one block, it cannot be deflated
                         if p1.size == 1:
                             # if copy parent is set to true, the parent who cannot be deflated will be copied as the offspring
@@ -408,7 +493,7 @@ class SLIM_GSGP:
 
                         # selecting a parent to inflate
                         p1 = self.selector(population)
-
+                       # print('p1 inflate', *p1.collection)
                         # determining the random mutation step
                         ms_ = self.ms()
 
@@ -480,6 +565,8 @@ class SLIM_GSGP:
                                 off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
 
                     # adding the new offspring to the offspring population
+                    #print('off mut', off1.collection)
+                   # print('off mut size',off1.size)
                     offs_pop.append(off1)
 
             # removing any excess individuals from the offspring population
@@ -584,7 +671,28 @@ class SLIM_GSGP:
                         " ".join([str(f) for f in population.fit]),
                         log,
                     ]
+                # level 10 for exercise: Create a new logger level, log = 10, 
+            # where you store the fitness and size of the second best individual and the worst individual, 
+            # make sure that everything that is being saved with log = 1 is also saved.
+            
+                elif log == 10:
+         
+                    sorted_ind, _ = self.find_elit_func(population,2)
+                
+                    if self.find_elit_func == get_best_min:
+                        _, worst_ind = get_best_max(population, 1)
+                    else:
+                     _, worst_ind = get_best_min(population, 1) 
 
+
+                    add_info = [self.elite.test_fitness,  #what log = 1 gives
+                            self.elite.nodes_count,   #what log = 1 givess
+                            sorted_ind[1].test_fitness, #second best fitness
+                            sorted_ind[1].nodes_count, #second best size
+                            worst_ind.test_fitness, #worst fitness
+                            worst_ind.nodes_count, #worst count
+                            log]
+                
                 else:
                     add_info = [self.elite.test_fitness, self.elite.nodes_count, log]
 

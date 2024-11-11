@@ -33,7 +33,7 @@ from slim_gsgp.utils.logger import log_settings
 from slim_gsgp.utils.utils import (get_terminals, check_slim_version, validate_inputs, generate_random_uniform,
                                    get_best_min, get_best_max)
 from slim_gsgp.algorithms.SLIM_GSGP.operators.mutators import inflate_mutation
-from slim_gsgp.selection.selection_algorithms import tournament_selection_max, tournament_selection_min
+from slim_gsgp.selection.selection_algorithms import tournament_selection_max, tournament_selection_min, nested_tournament_selection_min
 
 
 ELITES = {}
@@ -248,7 +248,7 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     slim_gsgp_parameters["seed"] = seed
 
     if minimization:
-        slim_gsgp_parameters["selector"] = tournament_selection_min(tournament_size)
+        slim_gsgp_parameters["selector"] = nested_tournament_selection_min(tournament_size)
         slim_gsgp_parameters["find_elit_func"] = get_best_min
     else:
         slim_gsgp_parameters["selector"] = tournament_selection_max(tournament_size)

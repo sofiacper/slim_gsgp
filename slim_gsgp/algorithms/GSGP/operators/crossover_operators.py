@@ -73,3 +73,35 @@ def geometric_crossover(tree1, tree2, random_tree, testing, new_data=False):
                 torch.mul(tree1.train_semantics, random_tree.train_semantics),
                 torch.mul(torch.sub(1, random_tree.train_semantics), tree2.train_semantics),
             )
+        
+def swap_root_crossover(tree1, tree2, testing, new_data = False):
+    """
+    Performs crossover between two trees by swapping the first block (root) of them.
+
+    Parameters
+    ----------
+    tree1 : Tree
+        The first parent tree.
+    tree2 : Tree
+        The second parent tree.
+    testing : bool
+        Flag indicating whether to use test semantics or train semantics.
+
+    Returns
+    -------
+    torch.Tensor
+        The result of the swap root crossover.
+    """
+
+    if testing:
+        print(tree1.test_semantics, tree2.test_semantics)
+        return torch.stack(
+            tree1.test_semantics[1:],
+            tree2.test_semantics[:1]
+        )
+    else:
+        print(tree1.train_semantics, tree2.train_semantics)
+        return torch.stack(
+            tree1.train_semantics[1:],
+            tree2.train_semantics[:1]
+            )
