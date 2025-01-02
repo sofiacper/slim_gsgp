@@ -330,11 +330,20 @@ class SLIM_GSGP:
                             worst_ind.test_fitness, #worst fitness
                             worst_ind.nodes_count, #worst count
                             log]
-            
 
             else:
+               
+               op = "+" if self.operator == "sum" else "*"
 
-                add_info = [self.elite.test_fitness, self.elite.nodes_count, log]
+               elite_repr = f" {op} ".join(
+                                    [
+                str(t.structure) if isinstance(t.structure, tuple)
+                else f'f({t.structure[1].structure})' if len(t.structure) == 3
+                else f'f({t.structure[1].structure} - {t.structure[2].structure})'
+                for t in self.elite.collection
+                    ]
+                    )
+               add_info = [self.elite.test_fitness, self.elite.nodes_count, elite_repr, log]
 
             logger(
                 log_path,
@@ -358,90 +367,119 @@ class SLIM_GSGP:
                 self.elite.nodes_count,
             )
 
+
         # begining the evolution process
         for it in range(1, n_iter + 1, 1):
+            #print('it:',it)
             # starting an empty offspring population
             offs_pop, start = [], time.time()
-
+            
             # adding the elite to the offspring population, if applicable
             if elitism:
                 offs_pop.extend(self.elites)
+
 
             # filling the offspring population
             while len(offs_pop) < self.pop_size:
 
                 # choosing between crossover and mutation
                 if random.random() < self.p_xo:
-                   # print('Crossover is used')
-
                     p1, p2 = self.selector(population), self.selector(population)
                     while p1 == p2:
                         # choosing parents
                         p1, p2 = self.selector(population), self.selector(population)
-                    #print('p1',*p1.collection,'p2', *p2.collection)
 
                     #get the parameters the crossover calls for
                     params = list(inspect.signature(self.crossover).parameters.keys())
+                    #params = list(inspect.signature(self.crossover(self.pi_init['FUNCTIONS'],self.pi_init['TERMINALS'], self.pi_init['CONSTANTS'])).parameters.keys())
 
-                    if 'individual' not in params and 'individual1' not in params: #if the crossover is an embeded function
-                        params = list(inspect.signature(self.crossover(self.pi_init['FUNCTIONS'],self.pi_init['TERMINALS'], self.pi_init['CONSTANTS'])).parameters.keys())
-                  
-                        if 'individual1' in params and 'individual2' in params: #if crossover uses 2 trees
+                    if 'individual' not in params and 'individual1' not in params: #if the crossover requires list
+                        #if crossover requires list of individuals with size n
+                        if self.crossover.__name__ in [
+                                                        "d_n_xo",
+                                                        'best_d_n_xo',
+                                                        'new_d_n_xo',
+                                                        "new_best_d_n_xo",
+                                                        "dif_d_n_xo",
+                                                        "dif_best_d_n_xo"
 
-                            if self.crossover.__name__ == 'geometric_crossover':
-                                xo_result =self.crossover(self.pi_init['FUNCTIONS'],self.pi_init['TERMINALS'], self.pi_init['CONSTANTS'])(
-                                                p1,
-                                                p2,
-                                                X_train,
-                                                max_depth=self.pi_init["init_depth"],
-                                                p_c=self.pi_init["p_c"],
-                                                X_test=X_test,
-                                                reconstruct=reconstruct) 
-                        
-                            if isinstance(xo_result, tuple): #if crossover gives back 2 trees
-                                off1, off2 = xo_result[0], xo_result[1]
+                                                        ]:
+                            #create list with size n
+                            ind_list = [p1,p2]
+                            while len(ind_list)!= (self.crossover.__closure__[2].cell_contents+1):
+                                #we need to make n+1 in best_n
+                                ind = self.selector(population)
+                               
+                                attempts = 0
+                                if ind in ind_list and attempts < 11:
+                                    
+                                    ind = self.selector(population)
+                                    attempts += 1
 
-                            else: #if crossover gives back 1 tree
-                                off1 = xo_result
-                                offs_pop.append(off1)
+                                elif attempts >= 11:
+                                    #print("Max attempts reached. Performing alternative action...")
+                                    # Perform alternative action here
+                                    ind = random.choices(ind_list, k=1)
 
-                        elif 'individual' in params: #if crossover needs 1 tree
-                            xo_result = self.crossover()
+                                """
+                                # pressure version
+                                ind_list.append(self.selector(population))
+                                #This one allows to select individuals with bigger selection pressure more often
+                                #offers less diversity
+                                #it does not solve time problem, which means it is selecting individuals 25 times that brings the problem
+                                """
 
-                            if isinstance(xo_result, tuple): #if crossover gives back 2 trees
-                                off1, off2 = xo_result[0], xo_result[1]
+                                """
+                                #random version
+                                #more diversity
+                                ind_list = random.choices(population, k=26)
+                                #This did also not help which kinda means the problem is on the crossover itself
+                                """
 
-                            else: #if crossover gives back 1 tree
-                                off1 = xo_result
-                                offs_pop.append(off1)
+                                """ version for not 25
+                                while ind in ind_list:
+                                    ind = self.selector(population)
+                                """
+
+                                #print('individual selected')
+                                ind_list.append(ind)
+
+                            #print('performing xo')
+                            xo_result = self.crossover(ind_list, reconstruct)
 
                     else: #if crossover function is not embedded
                         if 'individual1' in params and 'individual2' in params: #if crossover uses 2 trees
-                            if self.crossover.__name__ == 'swap_base_crossover':
+                            if self.crossover.__name__ in [
+                                                        'swap_base_crossover' ,
+                                                        'donor_xo',
+                                                        'best_d_xo'
+                                                        ]:
                                 xo_result = self.crossover(p1,p2, reconstruct)
-                       
-                            if isinstance(xo_result, tuple): #if crossover gives back 2 trees
-                                off1, off2 = xo_result[0], xo_result[1]
-                                offs_pop.extend([off1, off2])
-                                
-                            else: #if crossover gives back 1 tree
-                                off1 = xo_result
+                        
 
                         elif 'individual' in params: #if crossover uses 1 tree
                             xo_result = self.crossover()
-
-                            if isinstance(xo_result, tuple): #if crossover gives back 2 trees
-                                off1, off2 = xo_result[0], xo_result[1]
-                                offs_pop.extend([off1, off2])
-                                
-                            else: #if crossover gives back 1 tree
-                                off1 = xo_result
-
-
-                    #check individuals max depth (should not be over specified in max_depth) -> how to do this with with xo?
+                            
+                    """ 
+                    #check individuals max depth (should not be over specified in max_depth) -> not tested
+                    if max_depth is not None and any(individual.depth > max_depth for individual in xo_result):
+                        #we could keep the individual before doing the xo (fo the specific individual)
+                         over_index = [index for index, individual in enumerate(xo_result) if individual.depth >= max_depth]
+                         for index in over_index:
+                            if self.crossover.__name__ in [
+                                                        "donor_n_xo",
+                                                          ]:
+                                xo_result.tolist()
+                                xo_result[index] = ind_list[index]
+                            else:
+                                ind_list = [p1,p2]
+                                xo_result = list(xo_result)
+                                xo_result[index] = ind_list[index]
+                        #but doing it like this significantly decreases the evolution of the model....
+                    """  
+                    offs_pop.extend(xo_result)
 
                 else:
-                    #print('Mutation was used')
                     # so, mutation was selected. Now deflation or inflation is selected.
                     if random.random() < self.p_deflate:
 
@@ -490,10 +528,8 @@ class SLIM_GSGP:
 
                     # inflation mutation was selected
                     else:
-
                         # selecting a parent to inflate
                         p1 = self.selector(population)
-                       # print('p1 inflate', *p1.collection)
                         # determining the random mutation step
                         ms_ = self.ms()
 
@@ -564,18 +600,17 @@ class SLIM_GSGP:
                                 # otherwise, deflate the parent
                                 off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
 
+
                     # adding the new offspring to the offspring population
-                    #print('off mut', off1.collection)
-                   # print('off mut size',off1.size)
                     offs_pop.append(off1)
 
             # removing any excess individuals from the offspring population
             if len(offs_pop) > population.size:
-
                 offs_pop = offs_pop[: population.size]
 
             # turning the offspring population into a Population
             offs_pop = Population(offs_pop)
+
             # calculating the offspring population semantics
             offs_pop.calculate_semantics(X_train)
 
@@ -585,7 +620,6 @@ class SLIM_GSGP:
             # replacing the current population with the offspring population P = P'
             population = offs_pop
             self.population = population
-
             end = time.time()
 
             # setting the new elite(s)
@@ -692,9 +726,19 @@ class SLIM_GSGP:
                             worst_ind.test_fitness, #worst fitness
                             worst_ind.nodes_count, #worst count
                             log]
-                
+          
                 else:
-                    add_info = [self.elite.test_fitness, self.elite.nodes_count, log]
+                    op = "+" if self.operator == "sum" else "*"
+
+                    elite_repr = f" {op} ".join(
+                                    [
+                str(t.structure) if isinstance(t.structure, tuple)
+                else f'f({t.structure[1].structure})' if len(t.structure) == 3
+                else f'f({t.structure[1].structure} - {t.structure[2].structure})'
+                for t in self.elite.collection
+                    ]
+                    )
+                    add_info = [self.elite.test_fitness, self.elite.nodes_count, elite_repr, log]
 
                 logger(
                     log_path,

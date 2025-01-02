@@ -22,7 +22,7 @@
 
 import torch
 from slim_gsgp.initializers.initializers import rhh, grow, full
-from slim_gsgp.algorithms.SLIM_GSGP.operators.crossover_operators import geometric_crossover, swap_base_crossover
+from slim_gsgp.algorithms.SLIM_GSGP.operators.crossover_operators import donor_xo, donor_n_xo, best_donor_xo, best_donor_n_xo
 from slim_gsgp.algorithms.SLIM_GSGP.operators.mutators import (deflate_mutation, inflate_mutation)
 from slim_gsgp.selection.selection_algorithms import tournament_selection_min, nested_tournament_selection_min
 from slim_gsgp.evaluators.fitness_functions import *
@@ -35,8 +35,8 @@ FUNCTIONS = {
     'subtract': {'function': torch.sub, 'arity': 2},
     'multiply': {'function': torch.mul, 'arity': 2},
     'divide': {'function': protected_div, 'arity': 2},
-    'cosine': {'function': torch.cos, 'arity':1},
-    'mean': {'function': mean_, 'arity':2}
+    #'cosine': {'function': torch.cos, 'arity':1},
+    #'mean': {'function': mean_, 'arity':2}
 }
 
 CONSTANTS = {
@@ -48,19 +48,19 @@ CONSTANTS = {
 }
 
 # Set parameters
-settings_dict = {"p_test": 0.2}
+settings_dict = {"p_test": 0.3}
 
 # SLIM GSGP solve parameters
 slim_gsgp_solve_parameters = {
     "run_info": None,
     "ffunction": "rmse",
-    "max_depth": 15,
+    "max_depth": 17,
     "reconstruct": True,
     "n_iter": 1000,
     "elitism": True,
     "n_elites": 1,
     "log": 1,
-    "verbose": 1,
+    "verbose": 0,
     "n_jobs": 1,
     "test_elite": True
 }
@@ -68,15 +68,15 @@ slim_gsgp_solve_parameters = {
 # SLIM GSGP parameters
 slim_gsgp_parameters = {
     "initializer": "rhh",
-    "selector": nested_tournament_selection_min(2),
-    "crossover": swap_base_crossover,
-    "ms": None,
-    "inflate_mutator": None,
+    "selector": tournament_selection_min(2),
+    "crossover": best_donor_n_xo(n = 5), #best_donor_xo(), #donor_xo,#donor_n_xo(),
+    "ms": [0,1],
+    "inflate_mutator": inflate_mutation,
     "deflate_mutator": deflate_mutation,
     "p_xo": 0.2,
     "settings_dict": settings_dict,
     "find_elit_func": get_best_min,
-    "p_inflate": 0.2,
+    "p_inflate": 0.3,
     "copy_parent": True,
     "operator": None,
     "pop_size": 100,
@@ -87,7 +87,7 @@ slim_gsgp_parameters["p_m"] = 1 - slim_gsgp_parameters["p_xo"]
 slim_gsgp_pi_init = {
     'FUNCTIONS': FUNCTIONS,
     'CONSTANTS': CONSTANTS,
-    "p_c": 0.2,
+    "p_c": 0,
     "init_depth": 6
 
 }

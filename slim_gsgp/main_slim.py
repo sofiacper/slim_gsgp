@@ -248,7 +248,7 @@ def slim(X_train: torch.Tensor, y_train: torch.Tensor, X_test: torch.Tensor = No
     slim_gsgp_parameters["seed"] = seed
 
     if minimization:
-        slim_gsgp_parameters["selector"] = nested_tournament_selection_min(tournament_size)
+        slim_gsgp_parameters["selector"] = tournament_selection_min(tournament_size)
         slim_gsgp_parameters["find_elit_func"] = get_best_min
     else:
         slim_gsgp_parameters["selector"] = tournament_selection_max(tournament_size)
