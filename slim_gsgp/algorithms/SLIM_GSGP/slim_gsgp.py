@@ -334,6 +334,7 @@ class SLIM_GSGP:
             else:
                
                op = "+" if self.operator == "sum" else "*"
+               complexity = 0
 
                elite_repr = f" {op} ".join(
                                     [
@@ -343,7 +344,9 @@ class SLIM_GSGP:
                 for t in self.elite.collection
                     ]
                     )
-               add_info = [self.elite.test_fitness, self.elite.nodes_count, elite_repr, log]
+
+               #add_info = [self.elite.test_fitness, self.elite.nodes_count, elite_repr, log]
+               add_info = [self.elite.test_fitness, self.elite.nodes_count, complexity,log]
 
             logger(
                 log_path,
@@ -370,7 +373,7 @@ class SLIM_GSGP:
 
         # begining the evolution process
         for it in range(1, n_iter + 1, 1):
-            #print('it:',it)
+            #print(it)
             # starting an empty offspring population
             offs_pop, start = [], time.time()
             
@@ -391,25 +394,65 @@ class SLIM_GSGP:
 
                     #get the parameters the crossover calls for
                     params = list(inspect.signature(self.crossover).parameters.keys())
-                    #params = list(inspect.signature(self.crossover(self.pi_init['FUNCTIONS'],self.pi_init['TERMINALS'], self.pi_init['CONSTANTS'])).parameters.keys())
-
                     if 'individual' not in params and 'individual1' not in params: #if the crossover requires list
                         #if crossover requires list of individuals with size n
+                        if self.crossover.__name__ in ['best_block_n']:
+                            ind_list = [p1, p2]
+                           # print(self.crossover.__closure__[].cell_contents)
+                            while len(ind_list)!= (self.crossover.__closure__[2].cell_contents+1):
+                                #we need to make n+1 in best_n
+                                ind = self.selector(population)
+                                ind_list.append(ind)
+                            xo_result, xo_complexity = self.crossover(ind_list,ffunction, y_train,self.operator, reconstruct)
+
+
+
                         if self.crossover.__name__ in [
                                                         "d_n_xo",
                                                         'best_d_n_xo',
-                                                        'new_d_n_xo',
-                                                        "new_best_d_n_xo",
                                                         "dif_d_n_xo",
                                                         "dif_best_d_n_xo"
 
                                                         ]:
                             #create list with size n
                             ind_list = [p1,p2]
-                            while len(ind_list)!= (self.crossover.__closure__[2].cell_contents+1):
+
+                            #for flag
+                            #print('created temp pop')
+                           # temp_pop= Population([ini for ini in population if ini not in ind_list])
+                            #temp_pop.calculate_semantics(X_train)
+                           # temp_pop.evaluate(ffunction, y=y_train, operator=self.operator, n_jobs=n_jobs)
+                            #print('temp pop size is', temp_pop.size)
+
+                            while len(ind_list)!= (self.crossover.__closure__[1].cell_contents+1):
                                 #we need to make n+1 in best_n
                                 ind = self.selector(population)
-                               
+
+                                #Flag version
+                                #ind = self.selector(temp_pop)
+                                """"
+                                if temp_pop.size >1:
+                                    #print(f'population is {temp_pop.size}, selecting one individual')
+                                    ind = self.selector(temp_pop)
+
+                                elif temp_pop.size ==1:
+                                    print('only one individual left')
+                                    ind = [ini for ini in temp_pop][0]
+                                    #print('selected individual:', ind)
+
+                                else:
+                                    print('need to select repeated ind')
+                                    ind = self.selector(population)
+                                """
+                                #print('individual selected')
+                                #ind_list.append(ind)
+
+                                #temp_pop = Population([ini for ini in population if ini not in ind_list])
+                                #temp_pop.calculate_semantics(X_train)
+                                #temp_pop.evaluate(ffunction, y=y_train, operator=self.operator, n_jobs=n_jobs)
+
+                                """
+                                #medium version
                                 attempts = 0
                                 if ind in ind_list and attempts < 11:
                                     
@@ -422,24 +465,6 @@ class SLIM_GSGP:
                                     ind = random.choices(ind_list, k=1)
 
                                 """
-                                # pressure version
-                                ind_list.append(self.selector(population))
-                                #This one allows to select individuals with bigger selection pressure more often
-                                #offers less diversity
-                                #it does not solve time problem, which means it is selecting individuals 25 times that brings the problem
-                                """
-
-                                """
-                                #random version
-                                #more diversity
-                                ind_list = random.choices(population, k=26)
-                                #This did also not help which kinda means the problem is on the crossover itself
-                                """
-
-                                """ version for not 25
-                                while ind in ind_list:
-                                    ind = self.selector(population)
-                                """
 
                                 #print('individual selected')
                                 ind_list.append(ind)
@@ -447,36 +472,31 @@ class SLIM_GSGP:
                             #print('performing xo')
                             xo_result = self.crossover(ind_list, reconstruct)
 
-                    else: #if crossover function is not embedded
+                    else: #if crossover does not require list
+                        #print(self.crossover.__name__)
                         if 'individual1' in params and 'individual2' in params: #if crossover uses 2 trees
                             if self.crossover.__name__ in [
                                                         'swap_base_crossover' ,
-                                                        'donor_xo',
-                                                        'best_d_xo'
+                                                        'donor_xo'
                                                         ]:
                                 xo_result = self.crossover(p1,p2, reconstruct)
-                        
+                                xo_complexity = 0
+
+                            if self.crossover.__name__ in['best_d_xo']:
+                                xo_result, xo_complexity = self.crossover(p1, p2, reconstruct)
+
+
+                            if self.crossover.__name__ in [
+                                'imp_donor_xo',
+                                'best_imp_donor_xo',
+                                'best_block'
+                            ]:
+
+                                xo_result, xo_complexity = self.crossover(p1, p2,ffunction, y_train, self.operator, reconstruct)
 
                         elif 'individual' in params: #if crossover uses 1 tree
                             xo_result = self.crossover()
-                            
-                    """ 
-                    #check individuals max depth (should not be over specified in max_depth) -> not tested
-                    if max_depth is not None and any(individual.depth > max_depth for individual in xo_result):
-                        #we could keep the individual before doing the xo (fo the specific individual)
-                         over_index = [index for index, individual in enumerate(xo_result) if individual.depth >= max_depth]
-                         for index in over_index:
-                            if self.crossover.__name__ in [
-                                                        "donor_n_xo",
-                                                          ]:
-                                xo_result.tolist()
-                                xo_result[index] = ind_list[index]
-                            else:
-                                ind_list = [p1,p2]
-                                xo_result = list(xo_result)
-                                xo_result[index] = ind_list[index]
-                        #but doing it like this significantly decreases the evolution of the model....
-                    """  
+
                     offs_pop.extend(xo_result)
 
                 else:
@@ -533,6 +553,18 @@ class SLIM_GSGP:
                         # determining the random mutation step
                         ms_ = self.ms()
 
+                        #test without max_depth
+                        off1 = self.inflate_mutator(
+                            p1,
+                            ms_,
+                            X_train,
+                            max_depth=self.pi_init["init_depth"],
+                            p_c=self.pi_init["p_c"],
+                            X_test=X_test,
+                            reconstruct=reconstruct,
+                        )
+
+
                         # if the chosen parent is already at maximum depth and therefore cannot be inflated
                         if max_depth is not None and p1.depth == max_depth:
                             # if copy parent is set to true, the parent who cannot be inflated will be copied as the offspring
@@ -561,17 +593,6 @@ class SLIM_GSGP:
                             else:
                                 off1 = self.deflate_mutator(p1, reconstruct=reconstruct)
 
-                        # so the chosen individual can be normally inflated
-                        else:
-                            off1 = self.inflate_mutator(
-                                p1,
-                                ms_,
-                                X_train,
-                                max_depth=self.pi_init["init_depth"],
-                                p_c=self.pi_init["p_c"],
-                                X_test=X_test,
-                                reconstruct=reconstruct,
-                            )
 
                         # if offspring resulting from inflation exceedes the max depth
                         if max_depth is not None and off1.depth > max_depth:
@@ -728,6 +749,7 @@ class SLIM_GSGP:
                             log]
           
                 else:
+                    complexity+=xo_complexity
                     op = "+" if self.operator == "sum" else "*"
 
                     elite_repr = f" {op} ".join(
@@ -738,7 +760,8 @@ class SLIM_GSGP:
                 for t in self.elite.collection
                     ]
                     )
-                    add_info = [self.elite.test_fitness, self.elite.nodes_count, elite_repr, log]
+                   # add_info = [self.elite.test_fitness, self.elite.nodes_count, elite_repr, log]
+                    add_info = [self.elite.test_fitness, self.elite.nodes_count,complexity, log]
 
                 logger(
                     log_path,

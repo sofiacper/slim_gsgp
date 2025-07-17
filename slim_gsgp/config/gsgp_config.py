@@ -72,7 +72,7 @@ gsgp_parameters = {
     "settings_dict": settings_dict,
     "find_elit_func": get_best_min,
     "pop_size": 100,
-    "p_xo": 0.0,
+    "p_xo": 0.8,
     "seed": 74,
     "initializer": "rhh"
 }
@@ -80,8 +80,8 @@ gsgp_parameters = {
 gsgp_pi_init = {
     'FUNCTIONS': FUNCTIONS,
     'CONSTANTS': CONSTANTS,
-    "p_c": 0.2,
-    "init_depth": 8
+    "p_c": 0.0,
+    "init_depth": 6
 }
 
 fitness_function_options = {

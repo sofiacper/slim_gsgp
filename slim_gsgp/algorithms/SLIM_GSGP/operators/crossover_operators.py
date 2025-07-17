@@ -19,187 +19,13 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-"""
-Geometric crossover implementation for genetic programming trees.
-"""
-import random
 
+import random
 import torch
 import numpy as np
 from slim_gsgp.algorithms.GSGP.representations.tree import Tree
 from slim_gsgp.algorithms.SLIM_GSGP.representations.individual import Individual
-from slim_gsgp.utils.utils import get_random_tree
-
-def geometric_crossover(FUNCTIONS, TERMINALS,CONSTANTS):
-    """
-    Generate an geometric crossover function.
-
-    Parameters
-    ----------
-    FUNCTIONS : dict
-        The dictionary of functions used in the mutation.
-    TERMINALS : dict
-        The dictionary of terminals used in the mutation.
-    CONSTANTS : dict
-        The dictionary of constants used in the mutation.
-    Returns
-    -------
-    Callable
-        An geometric crossover function (`geom_xo`).
-
-        Parameters
-        ----------
-        individual1: Individual
-            The tree 1 Individual to crossover.
-        individual2: Individual
-            The tree 2 Individual to crossover.
-        X : torch.Tensor
-            Input data for calculating semantics.
-        max_depth : int, optional
-            Maximum depth for generated trees (default: 8).
-        p_c : float, optional
-            Probability of choosing constants (default: 0.1).
-        X_test : torch.Tensor, optional
-            Test data for calculating test semantics (default: None).
-        grow_probability : float, optional
-            Probability of growing trees during mutation (default: 1).
-        reconstruct : bool, optional
-            Whether to reconstruct the Individual's collection after mutation (default: True).
-
-        Returns
-        -------
-        Individual
-            The geometric crossover tree Individual.
-    """
-    def geom_xo(
-        individual1,
-        individual2,
-        X,
-        max_depth=8,
-        p_c=0.1,
-        X_test=None,
-        grow_probability=1,
-        reconstruct=True,
-    ):
-        """
-        Perform geometric crossover on the given Individuals.
-
-        Parameters
-        ----------
-        individual1 : Individual
-            The tree 1 Individual to crossover.
-        individual2 : Individual
-            The tree 2 Individual to crossover.
-        X : torch.Tensor
-            Input data for calculating semantics.
-        max_depth : int, optional
-            Maximum depth for generated trees (default: 8).
-        p_c : float, optional
-            Probability of choosing constants (default: 0.1).
-        X_test : torch.Tensor, optional
-            Test data for calculating test semantics (default: None).
-        grow_probability : float, optional
-            Probability of growing trees during mutation (default: 1).
-        reconstruct : bool, optional
-            Whether to reconstruct the Individual's collection after crossover (default: True).
-
-        Returns
-        -------
-        Individual
-            The geometric crossover tree Individual.
-        """
-        # getting one random tree
-        random_tree1 = get_random_tree(
-                max_depth,
-                FUNCTIONS,
-                TERMINALS,
-                CONSTANTS,
-                inputs=X,
-                p_c=p_c,
-                grow_probability=grow_probability,
-                logistic = False
-                #logistic = True #in doubt here
-            )
-
-        # calculating the semantics of the random tree on testing, if applicable
-        if X_test is not None:
-                    random_tree1.calculate_semantics(
-                        X_test, testing=True, #logistic=single_tree_sigmoid or sig
-                    )
-
-        #since we want to keep working with trees, we need to create tree instances for each new tree that arises from geometric crossover
-        #left block
-        left_tree = Tree(
-              structure = [torch.mul, *individual1.collection, random_tree1],
-              train_semantics= torch.mul(*individual1.train_semantics, random_tree1.train_semantics),
-              test_semantics= (torch.mul(*individual1.test_semantics, random_tree1.test_semantics) 
-               if individual1.test_semantics is not None 
-                else None),
-             reconstruct=True,
-        ) 
-        #nested tree of rigth block
-        nested_tree = Tree(
-              structure = [torch.sub, 1, random_tree1],
-              train_semantics= torch.sub(1, random_tree1.train_semantics),
-              test_semantics= (torch.sub(1, random_tree1.test_semantics)
-               if random_tree1.test_semantics is not None 
-                else None),
-             reconstruct=True,
-        ) 
-
-        #rigth block
-        rigth_tree = Tree(
-              structure = [torch.mul, nested_tree, *individual2.collection ],
-              train_semantics= torch.mul(nested_tree.train_semantics, *individual2.train_semantics),
-              test_semantics= (torch.mul(nested_tree.test_semantics, *individual2.test_semantics)
-               if individual2.test_semantics is not None 
-                else None),
-             reconstruct=True,
-        ) 
-
-        #final tree
-        new_tree =  Tree(
-              structure = [torch.add, left_tree, rigth_tree],
-              train_semantics= torch.add(left_tree.train_semantics, rigth_tree.train_semantics),
-              test_semantics= (torch.add(left_tree.test_semantics, rigth_tree.test_semantics)
-               if left_tree.test_semantics is not None 
-                else None),
-             reconstruct=True,
-        ) 
-
-        offs = Individual(
-            collection=( [new_tree] 
-            if reconstruct
-            else None
-        ),
-        train_semantics= new_tree.train_semantics,
-        test_semantics=(new_tree.test_semantics
-                
-                if new_tree.test_semantics is not None  
-                else None
-         ),
-            reconstruct=reconstruct,
-        )
-
-        offs.size = len(offs.collection)
-        offs.nodes_collection = [tree.nodes for tree in offs.collection]
-        offs.nodes_count = sum(offs.nodes_collection) + (offs.size - 1)
-
-        offs.depth_collection = [tree.depth for tree in offs.collection]
-        offs.depth = max(
-          [
-                depth - (i - 1) if i != 0 else depth
-                for i, depth in enumerate(offs.depth_collection)
-            ]
-        ) + (offs.size - 1)
-        #------
-        #i am now thinking about the representation of geometric_xo better and am extremelly lost
-        #i need to know how geometric_xo works on SLIM: 1) do wee add a new tree to 1 parent; 2) do we select a tree from the parent; 
-        #3) do we perform xo to every tree in the individual and keep the smallest individual
-        return offs
-
-    return geom_xo
-      
+from slim_gsgp.utils.utils import get_random_tree, _evaluate_slim_individual
 def swap_base_crossover(individual1, individual2, reconstruct = True ):
     """
     Performs crossover between two individuals by swapping the first block of them.
@@ -319,7 +145,6 @@ def swap_base_crossover(individual1, individual2, reconstruct = True ):
     ) + (offs2.size - 1)
 
     return offs1, offs2
-
 def donor_xo(individual1, individual2, reconstruct = True):
     """
     Performs crossover between 2 individuals by donating a block of the donor to the reciever (selected at random between 2 individuals)
@@ -328,7 +153,7 @@ def donor_xo(individual1, individual2, reconstruct = True):
     ----------
     individual1 : Tree
         The first individual.
-    individual2: list 
+    individual2: Tree
         The second individual.
     reconstruct : bool, optional
         Whether to reconstruct the Individual's collection after crossover (default: True).
@@ -386,104 +211,11 @@ def donor_xo(individual1, individual2, reconstruct = True):
                                 for i, depth in enumerate(donor_offs.depth_collection)]
                             ) + (donor_offs.size - 1)
 
-        if donor_idx == 0:
-            return donor_offs, recipient_offs
-        else:
-            return recipient_offs, donor_offs
+
+        return donor_offs, recipient_offs
 
     else:
-
         return individual1, individual2
-    
-def donor_n_xo(n= 5):
-    """
-    Generate a donor_n_gxo function.
-
-    Parameters
-    ----------
-    n: int
-        Number of individuals to be used in crossover (1 donor, n-1 recievers).
-    Returns
-    -------
-    Callable
-        An donor_n_gxo crossover function (`d_n_xo`).
-
-        Performs crossover between n individuals by donating a block of the donor to the n individuals in the reciever_list
-
-        Parameters
-        ----------
-        individual_list: list 
-            A list of Trees with n individuals to be used on donor_n_gxo.
-        reconstruct : bool, optional
-            Whether to reconstruct the Individual's collection after crossover (default: True).
-
-        Returns
-        -------
-        Individuals
-            The donor_n_gxo crossover tree n Individuals.
-    """
-    def d_n_xo(individual_list, reconstruct = True):
-    #In this crossover, we recieve one individual that is the parent and a list of individuals that are recievers
-    #the goal is to perform the same operation but instead of having one reciever, having n recievers
-
-        #choose at random the index of the donor (0 = p1, 1= p2)
-        donor_idx = random.randint(0,n-1)
-        donor = individual_list[donor_idx]
-        recipients = individual_list[:donor_idx]
-        recipients.extend(individual_list[donor_idx+1:])
-
-        #choose at random a block from the donor
-        if donor.size > 1:
-            donation_idx = random.randint(1, donor.size - 1 )
-
-            xo_recipients = ()
-
-            for recipient in recipients:
-                recipient_offs = Individual(collection=[*recipient.collection, donor[donation_idx]]
-                         if reconstruct else None,
-                          train_semantics=torch.stack([*recipient.train_semantics, donor.train_semantics[donation_idx]]),
-                          test_semantics=torch.stack([*recipient.test_semantics, donor.test_semantics[donation_idx]])
-                          if donor.test_semantics is not None
-                          else None,
-                          reconstruct=reconstruct)
-                recipient_offs.nodes_collection = recipient.nodes_collection + [donor.nodes_collection[donation_idx]]
-                recipient_offs.depth_collection = recipient.depth_collection + [donor.depth_collection[donation_idx]]
-                recipient_offs.size = recipient.size + 1
-                recipient_offs.nodes_count = sum(recipient_offs.nodes_collection) + (recipient_offs.size - 1)
-                recipient_offs.depth =  max([ depth - (i - 1) if i != 0 else depth
-                                            for i, depth in enumerate(recipient_offs.depth_collection)]
-                                            ) + (recipient_offs.size - 1)
-
-                xo_recipients += xo_recipients + (recipient_offs,)
-                #xo_recipients.extend(recipient_offs)
-
-            donor_offs = Individual(collection=donor.collection[:donation_idx] + donor.collection[donation_idx+1:]
-                         if reconstruct else None,
-                          train_semantics=torch.stack(
-                                [*donor.train_semantics[:donation_idx], *donor.train_semantics[donation_idx + 1:]]),
-                          test_semantics=torch.stack(
-                [*donor.test_semantics[:donation_idx], *donor.test_semantics[donation_idx + 1:]])
-                          if donor.test_semantics is not None
-                          else None,
-                          reconstruct=reconstruct)
-
-            donor_offs.nodes_collection = donor.nodes_collection[:donation_idx] + donor.nodes_collection[donation_idx + 1:]
-            donor_offs.depth_collection = donor.depth_collection[:donation_idx] + donor.depth_collection[donation_idx + 1:]
-            donor_offs.size = donor.size - 1
-            donor_offs.nodes_count = sum(donor_offs.nodes_collection) + (donor_offs.size - 1)
-            donor_offs.depth = max([depth - (i - 1) if i != 0 else depth
-                                for i, depth in enumerate(donor_offs.depth_collection)]
-                            ) + (donor_offs.size - 1)
-
-            #xo_recipients += (donor_offs,)
-            xo_recipients = xo_recipients[:donation_idx] + (donor_offs,) + xo_recipients[donor_idx:]
-
-            return *xo_recipients,
-
-        else:
-            return *individual_list,
-    return d_n_xo
-
 def best_donor_xo(measure = 'min_fitness'):
     """
     Generate a best_donor_xo function.
@@ -491,7 +223,7 @@ def best_donor_xo(measure = 'min_fitness'):
     Parameters
     ----------
     measure: string
-        Measure to be considered when selection the 'best' individual to be donor.
+        Measure to be considered when selecting the 'best' individual to be donor.
     Returns
     -------
     Callable
@@ -504,7 +236,7 @@ def best_donor_xo(measure = 'min_fitness'):
         ----------
         individual1 : Tree
             The first individual.
-        individual2: list 
+        individual2: list
             The second individual.
         reconstruct : bool, optional
             Whether to reconstruct the Individual's collection after crossover (default: True).
@@ -515,40 +247,43 @@ def best_donor_xo(measure = 'min_fitness'):
             The best_donor_xo crossover tree Individuals.
     """
     def best_d_xo(individual1, individual2, reconstruct = True):
-         
-    #choose the best individual
+        complexity = 0
+        #choose the best individual
         if measure == 'biggest':
             donor_idx = np.argmax([ind.size for ind in [individual1, individual2]])
+            #complexity += 2
         elif measure == 'min_fitness':
             donor_idx = np.argmin([ind.fitness for ind in [individual1, individual2]])
+            complexity+=2
         elif measure == 'max_fitness':
             donor_idx = np.argmax([ind.fitness for ind in [individual1, individual2]])
-    
+            complexity+=2
+
+        #asign donor and reciever
         donor = individual1 if donor_idx == 0 else individual2
         recipient = individual1 if donor_idx == 1 else individual2
 
-    #choose at random a block from the donor
         if donor.size > 1:
+            # choose at random a block from the donor
             donation_idx = random.randint(1, donor.size - 1 )
 
+            #create new recipient offspring
             recipient_offs = Individual(collection=[*recipient.collection, donor[donation_idx]]
-                         if reconstruct else None,
+                          if reconstruct else None,
                           train_semantics=torch.stack([*recipient.train_semantics, donor.train_semantics[donation_idx]]),
                           test_semantics=torch.stack([*recipient.test_semantics, donor.test_semantics[donation_idx]])
-                          if donor.test_semantics is not None
-                          else None,
+                          if donor.test_semantics is not None else None,
                           reconstruct=reconstruct)
 
+            #create new donor offspring
             donor_offs = Individual(collection=donor.collection[:donation_idx] + donor.collection[donation_idx+1:]
                          if reconstruct else None,
-                          train_semantics=torch.stack(
-                                [*donor.train_semantics[:donation_idx], *donor.train_semantics[donation_idx + 1:]]),
-                          test_semantics=torch.stack(
-                [*donor.test_semantics[:donation_idx], *donor.test_semantics[donation_idx + 1:]])
-                          if donor.test_semantics is not None
-                          else None,
+                         train_semantics=torch.stack([*donor.train_semantics[:donation_idx], *donor.train_semantics[donation_idx + 1:]]),
+                          test_semantics=torch.stack([*donor.test_semantics[:donation_idx], *donor.test_semantics[donation_idx + 1:]])
+                          if donor.test_semantics is not None else None,
                           reconstruct=reconstruct)
 
+            #add missing information about each offspring
             recipient_offs.nodes_collection = recipient.nodes_collection + [donor.nodes_collection[donation_idx]]
             donor_offs.nodes_collection = donor.nodes_collection[:donation_idx] + donor.nodes_collection[donation_idx + 1:]
 
@@ -562,150 +297,49 @@ def best_donor_xo(measure = 'min_fitness'):
             donor_offs.nodes_count = sum(donor_offs.nodes_collection) + (donor_offs.size - 1)
 
             recipient_offs.depth = recipient_offs.depth = max([ depth - (i - 1) if i != 0 else depth
-                                                                    for i, depth in enumerate(recipient_offs.depth_collection)]
-                                                                    ) + (recipient_offs.size - 1)
+                                                                 for i, depth in enumerate(recipient_offs.depth_collection)]) + (recipient_offs.size - 1)
             donor_offs.depth = max([depth - (i - 1) if i != 0 else depth
-                                for i, depth in enumerate(donor_offs.depth_collection)]
-                            ) + (donor_offs.size - 1)
+                                for i, depth in enumerate(donor_offs.depth_collection)]) + (donor_offs.size - 1)
 
-            if donor_idx == 0:
-                return donor_offs, recipient_offs
-            else:
-                return recipient_offs, donor_offs
+
+            result = (donor_offs, recipient_offs)
+            return result, complexity
 
         else:
+            result = (individual1, individual2)
+            return result, complexity
 
-            return individual1, individual2
-    
-    return best_d_xo 
-
-def best_donor_n_xo(n= 5, measure = 'min_fitness'):
+    return best_d_xo
+def donor_n_xo(n=5):
     """
-    Generate a best_donor_n_xo function.
+    Generate a donor_n_xo function.
 
     Parameters
     ----------
     n: int
-        Number of individuals to be used in crossover (1 donor, n-1 recievers).
-    measure: string
-        Measure to be considered when selection the 'best' individual to be donor.
+        Number of individuals to be used as recievers in crossover (1 donor, n receivers).
 
     Returns
     -------
     Callable
-        An best_donor_n_xo crossover function (`best_d_n_xo`).
-
-        Performs crossover between n individuals by donating a block of the donor to the n individuals in the reciever_list
-
-        Parameters
-        ----------
-        individual_list: list 
-            A list of Trees with n individuals to be used on donor_n_gxo.
-        reconstruct : bool, optional
-            Whether to reconstruct the Individual's collection after crossover (default: True).
-
-        Returns
-        -------
-        Individuals
-            The best_donor_n_xo crossover tree n Individuals.
-    """
-    def best_d_n_xo(individual_list, reconstruct = True):
-
-        _ = n #dummy variable so n is identifiable
-
-        #choose best individual to be donor:
-        if measure == 'biggest':
-            donor_idx = np.argmax([ind.size for ind in individual_list])
-        elif measure == 'min_fitness':
-            donor_idx = np.argmin([ind.fitness for ind in individual_list])
-        elif measure == 'max_fitness':
-            donor_idx = np.argmax([ind.fitness for ind in individual_list])
-    
-        donor = individual_list[donor_idx]
-        recipients = individual_list[:donor_idx]
-        recipients.extend(individual_list[donor_idx+1:])
-
-        #choose at random a block from the donor
-        if donor.size > 1:
-            donation_idx = random.randint(1, donor.size - 1 )
-
-            xo_recipients = ()
-
-            for recipient in recipients:
-                recipient_offs = Individual(collection=[*recipient.collection, donor[donation_idx]]
-                         if reconstruct else None,
-                          train_semantics=torch.stack([*recipient.train_semantics, donor.train_semantics[donation_idx]]),
-                          test_semantics=torch.stack([*recipient.test_semantics, donor.test_semantics[donation_idx]])
-                          if donor.test_semantics is not None
-                          else None,
-                          reconstruct=reconstruct)
-                recipient_offs.nodes_collection = recipient.nodes_collection + [donor.nodes_collection[donation_idx]]
-                recipient_offs.depth_collection = recipient.depth_collection + [donor.depth_collection[donation_idx]]
-                recipient_offs.size = recipient.size + 1
-                recipient_offs.nodes_count = sum(recipient_offs.nodes_collection) + (recipient_offs.size - 1)
-                recipient_offs.depth = max([depth - (i - 1) if i != 0 else depth
-                                for i, depth in enumerate(recipient_offs.depth_collection)]
-                            ) + (recipient_offs.size - 1)
-
-                xo_recipients += xo_recipients + (recipient_offs,)
-                #xo_recipients.extend(recipient_offs)
-
-            donor_offs = Individual(collection=donor.collection[:donation_idx] + donor.collection[donation_idx+1:]
-                         if reconstruct else None,
-                          train_semantics=torch.stack(
-                                [*donor.train_semantics[:donation_idx], *donor.train_semantics[donation_idx + 1:]]),
-                          test_semantics=torch.stack(
-                [*donor.test_semantics[:donation_idx], *donor.test_semantics[donation_idx + 1:]])
-                          if donor.test_semantics is not None
-                          else None,
-                          reconstruct=reconstruct)
-
-            donor_offs.nodes_collection = donor.nodes_collection[:donation_idx] + donor.nodes_collection[donation_idx + 1:]
-            donor_offs.depth_collection = donor.depth_collection[:donation_idx] + donor.depth_collection[donation_idx + 1:]
-            donor_offs.size = donor.size - 1
-            donor_offs.nodes_count = sum(donor_offs.nodes_collection) + (donor_offs.size - 1)
-            donor_offs.depth = max([depth - (i - 1) if i != 0 else depth
-                                for i, depth in enumerate(donor_offs.depth_collection)]
-                            ) + (donor_offs.size - 1)
-
-            #xo_recipients += (donor_offs,)
-            xo_recipients = xo_recipients[:donation_idx] + (donor_offs,) + xo_recipients[donor_idx:]
-            return *xo_recipients,
-
-        else:
-            return *individual_list,
-    return best_d_n_xo
-
-def new_donor_n_xo(n=5):
-    """
-    Generate a parallel donor_n_gxo function.
-
-    Parameters
-    ----------
-    n: int
-        Number of individuals to be used in crossover (1 donor, n-1 receivers).
-
-    Returns
-    -------
-    Callable
-        A donor_n_gxo crossover function (`paralel_d_n_xo`).
-        Performs crossover between n individuals by donating a block of the donor to the n individuals in the receiver_list.
+        A donor_n_xo crossover function (`d_n_xo`).
+        Performs crossover between n individuals by donating a random block of the donor to the n individuals in the receiver_list.
 
     Parameters
     ----------
     individual_list: list
-        A list of Trees with n individuals to be used on donor_n_gxo.
+        A list of Trees with n+1 individuals to be used on donor_n_xo.
     reconstruct : bool, optional
         Whether to reconstruct the Individual's collection after crossover (default: True).
 
     Returns
     -------
     Individuals
-        The donor_n_gxo crossover tree n Individuals.
+        The donor_n_gxo crossover tree n+1 Individuals.
     """
 
     def crossover_for_recipient(donor, recipient, donation_idx, reconstruct):
-        """Helper function to apply crossover on a single recipient."""
+        """Helper function to apply crossover on a single recipient. Created to make the crossover more efficient"""
         recipient_offs = Individual(
             collection=[*recipient.collection, donor[donation_idx]] if reconstruct else None,
             train_semantics=torch.stack([*recipient.train_semantics, donor.train_semantics[donation_idx]]),
@@ -724,22 +358,23 @@ def new_donor_n_xo(n=5):
 
         return recipient_offs
 
-    def new_d_n_xo(individual_list, reconstruct=True):
-        # Choose at random the index of the donor (0 = p1, 1= p2)
-        donor_idx = random.randint(0, n - 1)
+    def d_n_xo(individual_list, reconstruct=True):
+
+        # Choose at random the index of the donor
+        #donor_idx = random.randint(0, n - 1)
+        donor_idx = random.randint(0, n) #n recievers means n+1 individuals
         donor = individual_list[donor_idx]
         recipients = individual_list[:donor_idx] + individual_list[donor_idx + 1:]
 
-        # Choose at random a block from the donor
         if donor.size > 1:
+            # Choose at random a block from the donor
             donation_idx = random.randint(1, donor.size - 1)
-
+            #perform crossover on each of the recipients
             xo_recipients = list(crossover_for_recipient(donor, recipient, donation_idx, reconstruct) for recipient in recipients)
 
-            # Apply crossover on the donor itself
+            # Apply crossover on the donor, removing the block selected above
             donor_offs = Individual(
-                collection=donor.collection[:donation_idx] + donor.collection[
-                                                             donation_idx + 1:] if reconstruct else None,
+                collection=donor.collection[:donation_idx] + donor.collection[donation_idx + 1:] if reconstruct else None,
                 train_semantics=torch.stack(
                     [*donor.train_semantics[:donation_idx], *donor.train_semantics[donation_idx + 1:]]),
                 test_semantics=torch.stack(
@@ -760,45 +395,42 @@ def new_donor_n_xo(n=5):
             # Return the donor and the crossover recipients
             xo_recipients = xo_recipients[:donation_idx] + [donor_offs] + xo_recipients[donor_idx:]
             return *xo_recipients,
-
         else:
             return *individual_list,
-
-    return new_d_n_xo
-
-
-def new_best_donor_n_xo(n=5, measure='min_fitness'):
+    return d_n_xo
+def best_donor_n_xo(n=5, measure='min_fitness'):
     """
     Generate a best_donor_n_xo function.
 
     Parameters
     ----------
     n: int
-        Number of individuals to be used in crossover (1 donor, n-1 recievers).
+        Number of individuals to be used as recievers in crossover (1 donor, n recievers).
     measure: string
-        Measure to be considered when selection the 'best' individual to be donor.
+        Measure to be considered when selecting the 'best' individual to be donor.
 
     Returns
     -------
     Callable
         An best_donor_n_xo crossover function (`best_d_n_xo`).
 
-        Performs crossover between n individuals by donating a block of the donor to the n individuals in the reciever_list
+        Performs crossover between n+1 individuals by donating a block of the donor to the n individuals in the reciever_list.
+        Donor is selected as the best individual considering a specific "measure"
 
         Parameters
         ----------
         individual_list: list
-            A list of Trees with n individuals to be used on donor_n_gxo.
+            A list of Trees with n+1 individuals to be used on best_donor_n_xo.
         reconstruct : bool, optional
             Whether to reconstruct the Individual's collection after crossover (default: True).
 
         Returns
         -------
         Individuals
-            The best_donor_n_xo crossover tree n Individuals.
+            The best_donor_n_xo crossover tree n+1 Individuals.
     """
     def crossover_for_recipient(donor, recipient, donation_idx, reconstruct):
-        """Helper function to apply crossover on a single recipient."""
+        """Helper function to apply crossover on a single recipient. Used to make the crossover more efficient"""
         recipient_offs = Individual(
             collection=[*recipient.collection, donor[donation_idx]] if reconstruct else None,
             train_semantics=torch.stack([*recipient.train_semantics, donor.train_semantics[donation_idx]]),
@@ -816,9 +448,9 @@ def new_best_donor_n_xo(n=5, measure='min_fitness'):
                                            recipient_offs.size - 1)
 
         return recipient_offs
-    def new_best_d_n_xo(individual_list, reconstruct=True):
+    def best_d_n_xo(individual_list, reconstruct=True):
 
-        _ = n  # dummy variable so n is identifiable
+        _ = n  # dummy variable so n is identifiable (specific to the original way i called the crossover)
 
         # choose best individual to be donor:
         if measure == 'biggest':
@@ -833,23 +465,22 @@ def new_best_donor_n_xo(n=5, measure='min_fitness'):
 
         # choose at random a block from the donor
         if donor.size > 1:
+            # choose at random a block from the donor
             donation_idx = random.randint(1, donor.size - 1)
-
+            #Apply the crossover to each of the recipients
             xo_recipients = list(
                 crossover_for_recipient(donor, recipient, donation_idx, reconstruct) for recipient in recipients)
 
             donor_offs = Individual(collection=donor.collection[:donation_idx] + donor.collection[donation_idx + 1:]
-            if reconstruct else None,
-                                    train_semantics=torch.stack(
-                                        [*donor.train_semantics[:donation_idx],
-                                         *donor.train_semantics[donation_idx + 1:]]),
-                                    test_semantics=torch.stack(
-                                        [*donor.test_semantics[:donation_idx],
-                                         *donor.test_semantics[donation_idx + 1:]])
+                                    if reconstruct else None,
+                                    train_semantics=torch.stack([*donor.train_semantics[:donation_idx],
+                                                                *donor.train_semantics[donation_idx + 1:]]),
+                                    test_semantics=torch.stack([*donor.test_semantics[:donation_idx],
+                                                                *donor.test_semantics[donation_idx + 1:]])
                                     if donor.test_semantics is not None
                                     else None,
                                     reconstruct=reconstruct)
-
+            #Add missing information in the donor individual
             donor_offs.nodes_collection = donor.nodes_collection[:donation_idx] + donor.nodes_collection[
                                                                                   donation_idx + 1:]
             donor_offs.depth_collection = donor.depth_collection[:donation_idx] + donor.depth_collection[
@@ -857,44 +488,42 @@ def new_best_donor_n_xo(n=5, measure='min_fitness'):
             donor_offs.size = donor.size - 1
             donor_offs.nodes_count = sum(donor_offs.nodes_collection) + (donor_offs.size - 1)
             donor_offs.depth = max([depth - (i - 1) if i != 0 else depth
-                                    for i, depth in enumerate(donor_offs.depth_collection)]
-                                   ) + (donor_offs.size - 1)
+                                    for i, depth in enumerate(donor_offs.depth_collection)]) + (donor_offs.size - 1)
 
-            # xo_recipients += (donor_offs,)
+            #xo_recipients += (donor_offs,)
             xo_recipients = xo_recipients[:donation_idx] + [donor_offs] + xo_recipients[donor_idx:]
             return *xo_recipients,
 
         else:
             return *individual_list,
 
-    return new_best_d_n_xo
-
+    return best_d_n_xo
 def dif_donor_n_xo(n=5):
     """
-    Generate a parallel donor_n_gxo function.
+    Generate a  dif_donor_n_xo function.
 
     Parameters
     ----------
     n: int
-        Number of individuals to be used in crossover (1 donor, n-1 receivers).
+        Number of individuals to be used as recievers in crossover (1 donor, n receivers).
 
     Returns
     -------
     Callable
-        A donor_n_gxo crossover function (`paralel_d_n_xo`).
-        Performs crossover between n individuals by donating a block of the donor to the n individuals in the receiver_list.
+        A dif_donor_n_xo crossover function (`dif_d_n_xo`).
+        Performs crossover between n+1 individuals by donating a diferent random block of the donor to the n individuals in the receiver_list.
 
     Parameters
     ----------
     individual_list: list
-        A list of Trees with n individuals to be used on donor_n_gxo.
+        A list of Trees with n+1 individuals to be used on donor_n_gxo.
     reconstruct : bool, optional
         Whether to reconstruct the Individual's collection after crossover (default: True).
 
     Returns
     -------
     Individuals
-        The donor_n_gxo crossover tree n Individuals.
+        The donor_n_gxo crossover tree n+1 Individuals.
     """
 
     def crossover_for_recipient(donor, recipient, donation_idx, reconstruct):
@@ -920,42 +549,66 @@ def dif_donor_n_xo(n=5):
 
     def dif_d_n_xo(individual_list, reconstruct=True):
         # Choose at random the index of the donor (0 = p1, 1= p2)
-        donor_idx = random.randint(0, n - 1)
+        donor_idx = random.randint(0, n)
         donor = individual_list[donor_idx]
         recipients = individual_list[:donor_idx] + individual_list[donor_idx + 1:]
 
         # Choose at random a block from the donor
         if donor.size > 1:
-            #donation_idx = random.randint(1, donor.size - 1)
+            #still select a random block to remove from the donor (this is what i am not sure)
+            donation_idx = random.randint(1, donor.size - 1)
 
             xo_recipients = list(crossover_for_recipient(donor, recipient, random.randint(1, donor.size - 1), reconstruct) for recipient in recipients)
 
+            #donor
+            donor_offs = Individual(collection=donor.collection[:donation_idx] + donor.collection[donation_idx + 1:]
+            if reconstruct else None,
+                                    train_semantics=torch.stack(
+                                        [*donor.train_semantics[:donation_idx],
+                                         *donor.train_semantics[donation_idx + 1:]]),
+                                    test_semantics=torch.stack(
+                                        [*donor.test_semantics[:donation_idx],
+                                         *donor.test_semantics[donation_idx + 1:]])
+                                    if donor.test_semantics is not None
+                                    else None,
+                                    reconstruct=reconstruct)
+
+            donor_offs.nodes_collection = donor.nodes_collection[:donation_idx] + donor.nodes_collection[
+                                                                                  donation_idx + 1:]
+            donor_offs.depth_collection = donor.depth_collection[:donation_idx] + donor.depth_collection[
+                                                                                  donation_idx + 1:]
+            donor_offs.size = donor.size - 1
+            donor_offs.nodes_count = sum(donor_offs.nodes_collection) + (donor_offs.size - 1)
+            donor_offs.depth = max([depth - (i - 1) if i != 0 else depth
+                                    for i, depth in enumerate(donor_offs.depth_collection)]
+                                   ) + (donor_offs.size - 1)
             # Return the donor and the crossover recipients
-            xo_recipients = [donor] + xo_recipients
+            xo_recipients = [donor_offs] + xo_recipients
             return *xo_recipients,
 
         else:
             return *individual_list,
 
     return dif_d_n_xo
-
 def dif_best_donor_n_xo(n=5, measure='min_fitness'):
     """
-    Generate a best_donor_n_xo function.
+    Generate a dif_best_donor_n_xo function.
 
     Parameters
     ----------
     n: int
-        Number of individuals to be used in crossover (1 donor, n-1 recievers).
+        Number of individuals to be used as recievers in crossover (1 donor, n recievers).
     measure: string
-        Measure to be considered when selection the 'best' individual to be donor.
+        Measure to be considered when selecting the 'best' individual to be donor.
 
     Returns
     -------
     Callable
-        An best_donor_n_xo crossover function (`best_d_n_xo`).
+        A dif_best_donor_n_xo crossover function (`dif_best_d_n_xo`).
 
-        Performs crossover between n individuals by donating a block of the donor to the n individuals in the reciever_list
+        Performs crossover between n+1 individuals by donating random a block of the donor to the n individuals in the reciever_list.
+        The donor is selected based on which individual is the 'best' in terms of the selected measure.
+
 
         Parameters
         ----------
@@ -1005,15 +658,715 @@ def dif_best_donor_n_xo(n=5, measure='min_fitness'):
 
         # choose at random a block from the donor
         if donor.size > 1:
+            donation_idx = random.randint(1, donor.size - 1)
 
             xo_recipients = list(
                 crossover_for_recipient(donor, recipient, random.randint(1, donor.size - 1), reconstruct) for recipient in recipients)
 
-            # xo_recipients += (donor_offs,)
-            xo_recipients = [donor] + xo_recipients[donor_idx:]
+            donor_offs = Individual(collection=donor.collection[:donation_idx] + donor.collection[donation_idx + 1:]
+            if reconstruct else None,
+                                    train_semantics=torch.stack(
+                                        [*donor.train_semantics[:donation_idx],
+                                         *donor.train_semantics[donation_idx + 1:]]),
+                                    test_semantics=torch.stack(
+                                        [*donor.test_semantics[:donation_idx],
+                                         *donor.test_semantics[donation_idx + 1:]])
+                                    if donor.test_semantics is not None
+                                    else None,
+                                    reconstruct=reconstruct)
+
+            donor_offs.nodes_collection = donor.nodes_collection[:donation_idx] + donor.nodes_collection[
+                                                                                  donation_idx + 1:]
+            donor_offs.depth_collection = donor.depth_collection[:donation_idx] + donor.depth_collection[
+                                                                                  donation_idx + 1:]
+            donor_offs.size = donor.size - 1
+            donor_offs.nodes_count = sum(donor_offs.nodes_collection) + (donor_offs.size - 1)
+            donor_offs.depth = max([depth - (i - 1) if i != 0 else depth
+                                    for i, depth in enumerate(donor_offs.depth_collection)]
+                                   ) + (donor_offs.size - 1)
+
+            #xo_recipients += (donor_offs,)
+            #xo_recipients = [donor_offs] + xo_recipients[donor_idx:] what was before
+            xo_recipients = [donor_offs] + xo_recipients
             return *xo_recipients,
 
         else:
             return *individual_list,
 
     return dif_best_d_n_xo
+def improved_donor_xo(type = "fitness"):
+    """
+      Generate a improved_donor_xo function.
+
+      Parameters
+      ----------
+      type: string
+          Measure to be considered when selecting the 'best' and 'worst' index. Default is 'fitness'.
+
+      Returns
+      -------
+      Callable
+          A improved_donor_xo crossover function (`imp_donor_xo`).
+
+          Performs crossover between 2 individuals by donating a block of the donor to the reciever individual and removing a block from the donor.
+          The donor is selected randomly and the 'best' and 'worst' blocks from it are selected based on the fitness of the donor with the block removed (original-without_block).
+          The 'best' block is the one that leads to the worst without_block fitness (meaning it is the most impactful one).
+          The 'worst' block is the one that leads to the best without_block fitness (meaning it is the least impactul/ the one with the worst impact).
+          The 'best' block is donated to the reciever and the 'worst' block is removed from the donor.
+
+          Parameters
+          ----------
+          individual1 : Tree
+            The first individual.
+          individual2: Tree
+            The second individual.
+          ffunction_: function
+            The fitness function to be considered when selecting the blocks (usually the fitness used so assess slim)
+          y_train: array-like
+            Training output data for fitness to be calculated with.
+          operator_: {'sum', 'prod'}
+            Operator to apply to the semantics, either "sum" or "prod".
+          reconstruct : bool, optional
+              Whether to reconstruct the Individual's collection after crossover (default: True).
+
+          Returns
+          -------
+          Individuals
+              The improved_donor_n_xo crossover tree Individuals.
+      """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def block_selector_fit(donor, ffunction_, y_train, operator_): #done based on _evalute_slim_individual from utils
+        """Function that selects the best and worst block indexes"""
+        operator = torch.sum if operator_ == "sum" else torch.prod
+        num_blocks = donor.size
+
+        # Move tensors to GPU
+        y_train = y_train.to(device)
+        baseline_ = donor.fitness
+        complexity = 1
+
+        # Compute all block modifications in parallel
+        modified_trains = [operator(torch.cat((donor.train_semantics[:i], donor.train_semantics[i + 1:])), dim=0)
+                           for i in range(1, num_blocks)]
+
+        modified_trains = torch.stack(modified_trains)
+        modified_trains = torch.clamp(modified_trains, -1e12, 1e12)
+
+        complexity += len(modified_trains) #output calculations
+
+        # Compute all fitness values at once
+        train_fitnesses = ffunction_(y_train, modified_trains)
+        # Compute coefficients
+        coefs = (baseline_ - train_fitnesses)
+        complexity += len(train_fitnesses) #fitness calculations
+
+        # Get best and worst indices
+        #worst
+        worst_idx = torch.argmax(coefs) + 1 #+1 because index 0 is not used so we start conting from 1
+        #best
+        best_idx = torch.argmin(coefs) + 1
+
+        return worst_idx.item(), best_idx.item(), complexity
+
+    def block_selector_dis_sem(donor, ffunction_, y_train, operator_):  # done based on _evalute_slim_individual from utils
+        """Function that selects the best and worst block indexes"""
+        operator = torch.sum if operator_ == "sum" else torch.prod
+        num_blocks = donor.size
+
+        # Move tensors to GPU
+        y_train = y_train.to(device)
+        #version 2
+        baseline_ = [operator(donor.train_semantics, dim=0)]
+        baseline_ = torch.stack(baseline_)  # turn into array
+        complexity = 1
+
+        individual_semantics = [operator(torch.cat((donor.train_semantics[:i], donor.train_semantics[i + 1:])), dim=0)
+                           for i in range(1, num_blocks)]
+        individual_semantics = torch.stack(individual_semantics) #turn into array
+
+        complexity+= len(individual_semantics) #number of times output is calculated
+
+        #Calculate coefs
+        coefs = torch.mean(torch.abs(torch.sub(baseline_, individual_semantics)), dim=len(individual_semantics.shape) - 1)
+        # worst
+        worst_idx = torch.argmin(coefs) + 1  # remove index closest to 0 (minimun) = smallest disruption
+        # best
+        best_idx = torch.argmax(coefs) + 1  # keep index furthest from 0 (biggest disruption)
+
+        return worst_idx.item(), best_idx.item(), complexity
+
+    def block_selector_dis_fit(donor, ffunction_, y_train, operator_):  # done based on _evalute_slim_individual from utils
+        """Function that selects the best and worst block indexes"""
+        operator = torch.sum if operator_ == "sum" else torch.prod
+        num_blocks = donor.size
+
+        # Move tensors to GPU
+        y_train = y_train.to(device)
+        #version 1
+        baseline_ = donor.fitness
+        complexity = 1
+
+        # Compute all block modifications in parallel
+        modified_trains = [operator(torch.cat((donor.train_semantics[:i], donor.train_semantics[i + 1:])), dim=0)
+                           for i in range(1, num_blocks)]
+
+        modified_trains = torch.stack(modified_trains)
+        modified_trains = torch.clamp(modified_trains, -1e12, 1e12)
+
+        complexity += len(modified_trains)
+
+        # Compute all fitness values at once
+        train_fitnesses = ffunction_(y_train, modified_trains)
+        complexity += len(train_fitnesses)
+
+        # Compute coefficients
+        coefs = abs(baseline_ - train_fitnesses)
+
+        # Get best and worst indices
+        # worst
+        worst_idx = torch.argmin(coefs) + 1  # remove index closest to 0 (minimun)
+        # best
+        best_idx = torch.argmax(coefs) + 1 #keep index furthest from 0 (biggest disruption)
+
+        return worst_idx.item(), best_idx.item(), complexity
+
+    def imp_donor_xo(individual1, individual2, ffunction_, y_train, operator_, reconstruct=True):
+        donor_idx = random.randint(0, 1)
+        donor, recipient = (individual1, individual2) if donor_idx == 0 else (individual2, individual1)
+        xo_complexity = 0
+        if donor.size > 1:
+            if type == "fitness":
+                remove_idx, donation_idx , xo_complexity= block_selector_fit(donor, ffunction_, y_train, operator_)
+            elif type == "disruption_sem":
+                remove_idx, donation_idx , xo_complexity= block_selector_dis_sem(donor, ffunction_, y_train, operator_)
+            elif type == "disruption_fit":
+                remove_idx, donation_idx , xo_complexity = block_selector_dis_fit(donor, ffunction_, y_train, operator_)
+
+
+            recipient_offs = Individual(
+                collection=[*recipient.collection, donor.collection[donation_idx]] if reconstruct else None,
+                train_semantics=torch.cat((recipient.train_semantics, donor.train_semantics[donation_idx].unsqueeze(0))),
+                test_semantics=torch.cat((recipient.test_semantics, donor.test_semantics[donation_idx].unsqueeze(0)))
+                if donor.test_semantics is not None else None,
+                reconstruct=reconstruct
+            )
+
+            donor_offs = Individual(
+                collection=donor.collection[:remove_idx] + donor.collection[remove_idx + 1:] if reconstruct else None,
+                train_semantics=torch.cat((donor.train_semantics[:remove_idx], donor.train_semantics[remove_idx + 1:])),
+                test_semantics=torch.cat((donor.test_semantics[:remove_idx], donor.test_semantics[remove_idx + 1:]))
+                if donor.test_semantics is not None else None,
+                reconstruct=reconstruct
+            )
+
+            # Efficient attribute updates
+            recipient_offs.nodes_collection = recipient.nodes_collection + [donor.nodes_collection[donation_idx]]
+            donor_offs.nodes_collection = donor.nodes_collection[:remove_idx] + donor.nodes_collection[remove_idx + 1:]
+
+            recipient_offs.depth_collection = recipient.depth_collection + [donor.depth_collection[donation_idx]]
+            donor_offs.depth_collection = donor.depth_collection[:remove_idx] + donor.depth_collection[remove_idx + 1:]
+
+            recipient_offs.size, donor_offs.size = recipient.size + 1, donor.size - 1
+            recipient_offs.nodes_count = sum(recipient_offs.nodes_collection) + (recipient_offs.size - 1)
+            donor_offs.nodes_count = sum(donor_offs.nodes_collection) + (donor_offs.size - 1)
+
+            recipient_offs.depth = max([depth - (i - 1) if i != 0 else depth
+                                        for i, depth in enumerate(recipient_offs.depth_collection)]
+                                       ) + (recipient_offs.size - 1)
+
+            donor_offs.depth = max([depth - (i - 1) if i != 0 else depth
+                                    for i, depth in enumerate(donor_offs.depth_collection)]
+                                   ) + (donor_offs.size - 1)
+
+            result = (donor_offs, recipient_offs) if donor_idx == 0 else (recipient_offs, donor_offs)
+            return result, xo_complexity
+
+        result = (individual1, individual2)
+        return result, xo_complexity
+    return imp_donor_xo
+def best_improved_donor_xo(type = "fitness",measure = 'min_fitness' ): #parallelization imporved nothing, just amde it slower
+    """
+          Generate a best_improved_donor_xo function.
+
+          Parameters
+          ----------
+          type: string
+              Measure to be considered when selecting the 'best' and 'worst' index. Default is 'fitness'.
+          measure: string
+              Measure to be considered when selecting the 'best' individual to be donor.
+
+          Returns
+          -------
+          Callable
+              A best_improved_donor_xo crossover function (`best_imp_donor_xo`).
+
+              Performs crossover between 2 individuals by donating a block of the donor to the reciever individual and removing a block from the donor.
+              The donor is selected based on 'measure' and the 'best' and 'worst' blocks from it are selected based on the fitness of the donor with the block removed (original-without_block).
+              The 'best' block is the one that leads to the worst without_block fitness (meaning it is the most impactful one).
+              The 'worst' block is the one that leads to the best without_block fitness (meaning it is the least impactul/ the one with the worst impact).
+              The 'best' block is donated to the reciever and the 'worst' block is removed from the donor.
+
+              Parameters
+              ----------
+              individual1 : Tree
+                The first individual.
+              individual2: Tree
+                The second individual.
+              ffunction_: function
+                The fitness function to be considered when selecting the blocks (usually the fitness used so assess slim)
+              y_train: array-like
+                Training output data for fitness to be calculated with.
+              operator_: {'sum', 'prod'}
+                Operator to apply to the semantics, either "sum" or "prod".
+              reconstruct : bool, optional
+                  Whether to reconstruct the Individual's collection after crossover (default: True).
+
+              Returns
+              -------
+              Individuals
+                  The improved_donor_n_xo crossover tree Individuals.
+          """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def block_selector_fit(donor, ffunction_, y_train, operator_): #done using _evalute_slim_individual from utils
+        """Function that selects the best and worst block indexes"""
+        operator = torch.sum if operator_ == "sum" else torch.prod
+        num_blocks = donor.size
+
+        # Move tensors to GPU
+        y_train = y_train.to(device)
+        baseline_ = donor.fitness
+        complexity = 1
+
+        # Compute all block modifications in parallel
+        modified_trains = [operator(torch.cat((donor.train_semantics[:i], donor.train_semantics[i + 1:])), dim=0)
+                           for i in range(1, num_blocks)]
+
+        modified_trains = torch.stack(modified_trains)
+        modified_trains = torch.clamp(modified_trains, -1e12, 1e12)
+
+        complexity += len(modified_trains)
+
+        # Compute all fitness values at once
+        train_fitnesses = ffunction_(y_train, modified_trains)
+
+        complexity +=len(train_fitnesses)
+        # Compute coefficients
+        coefs = (baseline_ - train_fitnesses)
+
+        # Get best and worst indices
+
+        #worst
+        worst_idx = torch.argmax(coefs) + 1 #+1 because index 0 is not used in function so we start conting from 1
+        #best
+        best_idx = torch.argmin(coefs) + 1
+
+        return worst_idx.item(), best_idx.item(), complexity
+
+    def best_imp_donor_xo(individual1, individual2, ffunction_, y_train, operator_, reconstruct=True):
+        #donor_idx = random.randint(0, 1)
+        #donor, recipient = (individual1, individual2) if donor_idx == 0 else (individual2, individual1)
+
+        xo_complexity = 0
+        # choose the best individual
+        if measure == 'biggest':
+            donor_idx = np.argmax([ind.size for ind in [individual1, individual2]])
+        elif measure == 'min_fitness':
+            donor_idx = np.argmin([ind.fitness for ind in [individual1, individual2]])
+            xo_complexity+=2
+        elif measure == 'max_fitness':
+            donor_idx = np.argmax([ind.fitness for ind in [individual1, individual2]])
+            xo_complexity += 2
+
+        donor, recipient = (individual1, individual2) if donor_idx == 0 else (individual2, individual1)
+
+        if donor.size > 1:
+            if type == "fitness":
+                remove_idx, donation_idx, ind_complexity = block_selector_fit(donor, ffunction_, y_train, operator_)
+
+            xo_complexity+=ind_complexity
+
+            recipient_offs = Individual(
+                collection=[*recipient.collection, donor.collection[donation_idx]] if reconstruct else None,
+                train_semantics=torch.cat((recipient.train_semantics, donor.train_semantics[donation_idx].unsqueeze(0))),
+                test_semantics=torch.cat((recipient.test_semantics, donor.test_semantics[donation_idx].unsqueeze(0)))
+                if donor.test_semantics is not None else None,
+                reconstruct=reconstruct
+            )
+
+            donor_offs = Individual(
+                collection=donor.collection[:remove_idx] + donor.collection[remove_idx + 1:] if reconstruct else None,
+                train_semantics=torch.cat((donor.train_semantics[:remove_idx], donor.train_semantics[remove_idx + 1:])),
+                test_semantics=torch.cat((donor.test_semantics[:remove_idx], donor.test_semantics[remove_idx + 1:]))
+                if donor.test_semantics is not None else None,
+                reconstruct=reconstruct
+            )
+
+            # Efficient attribute updates
+            recipient_offs.nodes_collection = recipient.nodes_collection + [donor.nodes_collection[donation_idx]]
+            donor_offs.nodes_collection = donor.nodes_collection[:remove_idx] + donor.nodes_collection[remove_idx + 1:]
+
+            recipient_offs.depth_collection = recipient.depth_collection + [donor.depth_collection[donation_idx]]
+            donor_offs.depth_collection = donor.depth_collection[:remove_idx] + donor.depth_collection[remove_idx + 1:]
+
+            recipient_offs.size, donor_offs.size = recipient.size + 1, donor.size - 1
+            recipient_offs.nodes_count = sum(recipient_offs.nodes_collection) + (recipient_offs.size - 1)
+            donor_offs.nodes_count = sum(donor_offs.nodes_collection) + (donor_offs.size - 1)
+
+            recipient_offs.depth = max([depth - (i - 1) if i != 0 else depth
+                                        for i, depth in enumerate(recipient_offs.depth_collection)]
+                                       ) + (recipient_offs.size - 1)
+
+            donor_offs.depth = max([depth - (i - 1) if i != 0 else depth
+                                    for i, depth in enumerate(donor_offs.depth_collection)]
+                                   ) + (donor_offs.size - 1)
+
+            result = (donor_offs, recipient_offs) if donor_idx == 0 else (recipient_offs, donor_offs)
+            return result, xo_complexity
+
+        result = (individual1, individual2)
+        return result, xo_complexity
+    return best_imp_donor_xo
+def best_block_n_xo(n=5):
+    """
+          Generate a best_block_n_xo function.
+
+          Parameters
+          ----------
+          n: int
+            Number of individuals to be used as recievers in crossover (1 donor, n receivers).
+
+          Returns
+          -------
+          Callable
+              A best_block_n_xo crossover function (`best_block_n`).
+
+              Performs crossover between n+1 individuals by donating a block of the donor to the reciever individuals and removing a block from all individuals.
+              The donor is selected as the individual with the 'best' block, with 'best' and 'worst' blocks selected based on the fitness of the individual with the block removed (original-without_block).
+              The 'best' block is the one that leads to the worst without_block fitness (meaning it is the most impactful one).
+              The 'worst' block is the one that leads to the best without_block fitness (meaning it is the least impactul/ the one with the worst impact).
+              The 'best' overall block is donated to the n recievers.
+              All individuals have their 'worst' block removed, only if this block leads to an imporvement in fitness (original-without_block is positive).
+
+              Parameters
+              ----------
+              individual_list: list
+                 A list of Trees with n+1 individuals to be used on donor_n_xo.
+              ffunction_: function
+                The fitness function to be considered when selecting the blocks (usually the fitness used so assess slim)
+              y_train: array-like
+                Training output data for fitness to be calculated with.
+              operator_: {'sum', 'prod'}
+                Operator to apply to the semantics, either "sum" or "prod".
+              reconstruct : bool, optional
+                  Whether to reconstruct the Individual's collection after crossover (default: True).
+
+              Returns
+              -------
+              Individuals
+                  The best_improved_donor_n_xo crossover tree Individuals.
+          """
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def block_selector_fit(individual,ffunction_, y_train, operator_):
+        """Function that selects the 'best' and 'worst' blocks to be used"""
+
+        operator = torch.sum if operator_ == "sum" else torch.prod
+        num_blocks = individual.size
+        baseline_ = individual.fitness
+        complexity = 1
+
+        train_semantics = individual.train_semantics.to(device)
+        modified_trains = torch.stack([
+            operator(torch.cat((train_semantics[:i], train_semantics[i + 1:])), dim=0)
+            for i in range(1, num_blocks)
+        ]) if num_blocks > 1 else torch.tensor([])
+        modified_trains = torch.clamp(modified_trains, -1e12, 1e12) if num_blocks > 1 else modified_trains
+
+        complexity += len(modified_trains)
+
+        #calculate difference for individual blocks
+        train_fitnesses = ffunction_(y_train, modified_trains) if num_blocks > 1 else torch.tensor([baseline_])
+        coefs = baseline_ - train_fitnesses
+
+        complexity+=len(train_fitnesses)
+
+        #select the best and worst ones
+        worst_idx = (torch.argmax(coefs)+1).item() if num_blocks > 1 else 0
+        best_idx = (torch.argmin(coefs)+1).item() if num_blocks > 1 else 0
+
+
+        #you give back the coef difference, the biggest positive one is the one that is chosen because it represents the block that is most imporatant
+        return worst_idx, best_idx, coefs.max().item(), complexity if num_blocks > 1 else 0
+
+    def update_individual(individual, remove_idx, donor=None, best_block = None, reconstruct = True):
+        if donor is not None:
+            new_ind = Individual(
+                collection=[*individual.collection, donor.collection[best_block]] if reconstruct else None,
+                train_semantics=torch.cat(
+                    (individual.train_semantics, donor.train_semantics[best_block].unsqueeze(0))),
+                test_semantics=torch.cat((individual.test_semantics, donor.test_semantics[best_block].unsqueeze(0)))
+                if donor.test_semantics is not None else None,
+                reconstruct=reconstruct
+            )
+
+            new_ind.nodes_collection = individual.nodes_collection + [donor.nodes_collection[best_block]]
+            new_ind.depth_collection = individual.depth_collection + [donor.depth_collection[best_block]]
+            new_ind.size = individual.size + 1
+            new_ind.nodes_count = sum(new_ind.nodes_collection) + (new_ind.size - 1)
+            new_ind.depth = max([depth - (i - 1) if i != 0 else depth
+                                        for i, depth in enumerate(individual.depth_collection)]) + (
+                                           individual.size - 1)
+
+        if individual.size > 1:
+
+            new_ind = Individual(
+                collection=individual.collection[:remove_idx] + individual.collection[remove_idx + 1:] if reconstruct else None,
+                train_semantics=torch.cat((individual.train_semantics[:remove_idx], individual.train_semantics[remove_idx + 1:])),
+                test_semantics=torch.cat((individual.test_semantics[:remove_idx], individual.test_semantics[remove_idx + 1:]))
+                if individual.test_semantics is not None else None,
+                reconstruct=reconstruct
+            )
+
+            new_ind.nodes_collection = individual.nodes_collection[:remove_idx] + individual.nodes_collection[remove_idx + 1:]
+            new_ind.depth_collection = individual.depth_collection[:remove_idx] + individual.depth_collection[remove_idx + 1:]
+            new_ind.size = individual.size - 1
+            new_ind.nodes_count = sum(new_ind.nodes_collection) + (new_ind.size - 1)
+            new_ind.depth = max([depth - (i - 1) if i != 0 else depth
+                                    for i, depth in enumerate(new_ind.depth_collection)]
+                                   ) + (new_ind.size - 1)
+
+            return new_ind
+        else:
+            return individual
+    def best_block_n(individual_list, ffunction_, y_train, operator_, reconstruct=True):
+        _ = n
+        y_train = y_train.to(device)
+
+        #necessary variables
+        total_complexity = 0
+        worst_blocks = {}
+        best_blocks = {}
+        coefs = []
+        best_fitness = float("-inf")
+        best_donor_idx = None
+        best_block_idx = None
+
+        #iterate through all individuals to select donor (best overall block) and the 'worst' block from each individual.
+        for idx, ind in enumerate(individual_list):
+            worst_idx, best_idx, ind_best_fitness, ind_comp = block_selector_fit(ind, ffunction_, y_train, operator_)
+
+            total_complexity+=ind_comp
+            worst_blocks[idx] = worst_idx
+            best_blocks[idx] = best_idx
+            coefs.append(ind_best_fitness)
+
+            #if the current individual, has a positive coeficient that is bigger than the previous,it means the block is better
+            #We select only from positive coeficients so no 'bad' blocks are passed
+            if 0 <= ind_best_fitness > best_fitness:
+                best_fitness = ind_best_fitness
+                best_donor_idx = idx
+                best_block_idx = best_idx
+
+        # If no improvement is found for any individual (all values negative), select the least negative change
+        #This occurs mostly when few individuals are considered for the crossover (n=5)
+        if best_fitness == float("-inf"): #if best fitness was not changed
+            #select the donor as teh individual with 'best' out of the 'worst' blocks
+            best_donor_idx = torch.argmax(torch.tensor(coefs)).item()
+            #select the best block from donor
+            best_block_idx = best_blocks[best_donor_idx]
+            #not all crossovers lead to a positive change, but we decrease probability of negative ones
+
+
+        #select donor and recievers
+        donor = individual_list[best_donor_idx]
+        recipients = [ind for i, ind in enumerate(individual_list) if i != best_donor_idx]
+
+        #add 'best' block to recievers
+        recipients = [update_individual(recipient, -1, donor, best_block_idx) for i, recipient in
+                      enumerate(recipients) ]
+
+        #add everything back together
+        individual_list = (recipients[:best_donor_idx]+ [donor]+ recipients[best_donor_idx:])
+        #remove the 'worst' block when it leads to a positive change
+        individual_list = [
+        update_individual(ind, worst_blocks[i]) if coefs[i] > 0 else ind
+        for i, ind in enumerate(individual_list)
+                            ]
+
+        results = *individual_list,
+        return results, total_complexity
+
+    return best_block_n
+def best_block_xo():
+    """
+          Generate a best_block_n_xo function.
+
+          Parameters
+          ----------
+          n: int
+            Number of individuals to be used as recievers in crossover (1 donor, n receivers).
+
+          Returns
+          -------
+          Callable
+              A best_block_n_xo crossover function (`best_block_n`).
+
+              Performs crossover between n+1 individuals by donating a block of the donor to the reciever individuals and removing a block from all individuals.
+              The donor is selected as the individual with the 'best' block, with 'best' and 'worst' blocks selected based on the fitness of the individual with the block removed (original-without_block).
+              The 'best' block is the one that leads to the worst without_block fitness (meaning it is the most impactful one).
+              The 'worst' block is the one that leads to the best without_block fitness (meaning it is the least impactul/ the one with the worst impact).
+              The 'best' overall block is donated to the n recievers.
+              All individuals have their 'worst' block removed, only if this block leads to an imporvement in fitness (original-without_block is positive).
+
+              Parameters
+              ----------
+              individual_list: list
+                 A list of Trees with n+1 individuals to be used on donor_n_xo.
+              ffunction_: function
+                The fitness function to be considered when selecting the blocks (usually the fitness used so assess slim)
+              y_train: array-like
+                Training output data for fitness to be calculated with.
+              operator_: {'sum', 'prod'}
+                Operator to apply to the semantics, either "sum" or "prod".
+              reconstruct : bool, optional
+                  Whether to reconstruct the Individual's collection after crossover (default: True).
+
+              Returns
+              -------
+              Individuals
+                  The best_improved_donor_n_xo crossover tree Individuals.
+          """
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def block_selector_fit(individual,ffunction_, y_train, operator_):
+        """Function that selects the 'best' and 'worst' blocks to be used"""
+        operator = torch.sum if operator_ == "sum" else torch.prod
+        num_blocks = individual.size
+        baseline_ = individual.fitness
+        complexity = 1 #from baseline we need 1 fitness evaluation
+
+        train_semantics = individual.train_semantics.to(device)
+        modified_trains = torch.stack([
+            operator(torch.cat((train_semantics[:i], train_semantics[i + 1:])), dim=0)
+            for i in range(1, num_blocks)
+        ]) if num_blocks > 1 else torch.tensor([])
+        modified_trains = torch.clamp(modified_trains, -1e12, 1e12) if num_blocks > 1 else modified_trains
+
+        complexity += len(modified_trains)
+
+        #calculate difference for individual blocks
+        train_fitnesses = ffunction_(y_train, modified_trains) if num_blocks > 1 else torch.tensor([baseline_])
+
+        complexity+=len(train_fitnesses) #fitness measures from each block removed
+
+        coefs = baseline_ - train_fitnesses
+
+        #select the best and worst ones
+        worst_idx = (torch.argmax(coefs)+1).item() if num_blocks > 1 else 0
+        best_idx = (torch.argmin(coefs)+1).item() if num_blocks > 1 else 0
+
+        #you give back the coef difference, the biggest positive one is the one that is chosen because it represents the block that is most imporatant
+        return worst_idx, best_idx, coefs.max().item() , complexity if num_blocks > 1 else 0
+
+    def update_individual(individual, remove_idx, donor=None, best_block = None, reconstruct = True):
+        if donor is not None:
+            new_ind = Individual(
+                collection=[*individual.collection, donor.collection[best_block]] if reconstruct else None,
+                train_semantics=torch.cat(
+                    (individual.train_semantics, donor.train_semantics[best_block].unsqueeze(0))),
+                test_semantics=torch.cat((individual.test_semantics, donor.test_semantics[best_block].unsqueeze(0)))
+                if donor.test_semantics is not None else None,
+                reconstruct=reconstruct
+            )
+
+            new_ind.nodes_collection = individual.nodes_collection + [donor.nodes_collection[best_block]]
+            new_ind.depth_collection = individual.depth_collection + [donor.depth_collection[best_block]]
+            new_ind.size = individual.size + 1
+            new_ind.nodes_count = sum(new_ind.nodes_collection) + (new_ind.size - 1)
+            new_ind.depth = max([depth - (i - 1) if i != 0 else depth
+                                        for i, depth in enumerate(individual.depth_collection)]) + (
+                                           individual.size - 1)
+
+        if individual.size > 1:
+
+            new_ind = Individual(
+                collection=individual.collection[:remove_idx] + individual.collection[remove_idx + 1:] if reconstruct else None,
+                train_semantics=torch.cat((individual.train_semantics[:remove_idx], individual.train_semantics[remove_idx + 1:])),
+                test_semantics=torch.cat((individual.test_semantics[:remove_idx], individual.test_semantics[remove_idx + 1:]))
+                if individual.test_semantics is not None else None,
+                reconstruct=reconstruct
+            )
+
+            new_ind.nodes_collection = individual.nodes_collection[:remove_idx] + individual.nodes_collection[remove_idx + 1:]
+            new_ind.depth_collection = individual.depth_collection[:remove_idx] + individual.depth_collection[remove_idx + 1:]
+            new_ind.size = individual.size - 1
+            new_ind.nodes_count = sum(new_ind.nodes_collection) + (new_ind.size - 1)
+            new_ind.depth = max([depth - (i - 1) if i != 0 else depth
+                                    for i, depth in enumerate(new_ind.depth_collection)]
+                                   ) + (new_ind.size - 1)
+
+            return new_ind
+        else:
+            return individual
+    def best_block(individual1, individual2, ffunction_, y_train, operator_, reconstruct=True):
+        y_train = y_train.to(device)
+        individual_list = [individual1, individual2]
+
+        #necessary variables
+        worst_blocks = {}
+        best_blocks = {}
+        coefs = []
+        best_fitness = float("-inf")
+        best_donor_idx = None
+        best_block_idx = None
+        total_complexity = 0 #complexity is measured by total fitness calculations
+
+        #iterate through all individuals to select donor (best overall block) and the 'worst' block from each individual.
+        for idx, ind in enumerate(individual_list):
+            worst_idx, best_idx, ind_best_fitness, ind_comp = block_selector_fit(ind, ffunction_, y_train, operator_)
+
+            total_complexity+=ind_comp
+
+            worst_blocks[idx] = worst_idx
+            best_blocks[idx] = best_idx
+            coefs.append(ind_best_fitness)
+
+            #if the current individual, has a positive coeficient that is bigger than the previous,it means the block is better
+            #We select only from positive coeficients so no 'bad' blocks are passed
+            if 0 <= ind_best_fitness > best_fitness:
+                best_fitness = ind_best_fitness
+                best_donor_idx = idx
+                best_block_idx = best_idx
+
+        # If no improvement is found for any individual (all values negative), select the least negative change
+        #This occurs mostly when few individuals are considered for the crossover (n=5)
+        if best_fitness == float("-inf"): #if best fitness was not changed
+            #select the donor as teh individual with 'best' out of the 'worst' blocks
+            best_donor_idx = torch.argmax(torch.tensor(coefs)).item()
+            #select the best block from donor
+            best_block_idx = best_blocks[best_donor_idx]
+            #not all crossovers lead to a positive change, but we decrease probability of negative ones
+
+
+        #select donor and recievers
+        donor = individual_list[best_donor_idx]
+        recipients = [ind for i, ind in enumerate(individual_list) if i != best_donor_idx]
+
+        #add 'best' block to recievers
+        recipients = [update_individual(recipient, -1, donor, best_block_idx) for i, recipient in
+                      enumerate(recipients) ]
+
+        #add everything back together
+        individual_list = (recipients[:best_donor_idx]+ [donor]+ recipients[best_donor_idx:])
+        #remove the 'worst' block when it leads to a positive change
+        individual_list = [
+        update_individual(ind, worst_blocks[i]) if coefs[i] > 0 else ind
+        for i, ind in enumerate(individual_list)
+                            ]
+
+        result = *individual_list,
+        return result, total_complexity
+
+    return best_block

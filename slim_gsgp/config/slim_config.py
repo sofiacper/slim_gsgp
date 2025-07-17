@@ -44,7 +44,7 @@ CONSTANTS = {
     'constant_3': lambda _: torch.tensor(3.0),
     'constant_4': lambda _: torch.tensor(4.0),
     'constant_5': lambda _: torch.tensor(5.0),
-    'constant__1': lambda _: torch.tensor(-1.0)
+    #'constant__1': lambda _: torch.tensor(-1.0)
 }
 
 # Set parameters
@@ -54,7 +54,7 @@ settings_dict = {"p_test": 0.3}
 slim_gsgp_solve_parameters = {
     "run_info": None,
     "ffunction": "rmse",
-    "max_depth": 17,
+    "max_depth": None,
     "reconstruct": True,
     "n_iter": 1000,
     "elitism": True,
@@ -69,14 +69,14 @@ slim_gsgp_solve_parameters = {
 slim_gsgp_parameters = {
     "initializer": "rhh",
     "selector": tournament_selection_min(2),
-    "crossover": best_donor_n_xo(n = 5), #best_donor_xo(), #donor_xo,#donor_n_xo(),
+    "crossover": None,
     "ms": [0,1],
     "inflate_mutator": inflate_mutation,
     "deflate_mutator": deflate_mutation,
-    "p_xo": 0.2,
+    "p_xo": 0.2, #0.2
     "settings_dict": settings_dict,
     "find_elit_func": get_best_min,
-    "p_inflate": 0.3,
+    "p_inflate": 0.3, #0.3
     "copy_parent": True,
     "operator": None,
     "pop_size": 100,
